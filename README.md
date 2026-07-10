@@ -100,7 +100,7 @@ laserWatch, _ := bond.NewFuncTool(
     bond.FuncToolOptions{
         Name:        "laser_watch",
         Description: "Cuts through locks and barriers",
-        InputSchema: schema.For[CutInput](),
+        InputSchema: tool.SchemaFor[CutInput](),
     },
 )
 ```
@@ -131,8 +131,7 @@ bond/                        Core interfaces (Agent, Tool, Block, Stream, Invoke
 bond/agent/                  Orchestration: graph, swarm, A2A adapter, AsTool
 bond/provider/bedrock/       Amazon Bedrock Converse streaming provider
 bond/runtime/agentcore/      AWS AgentCore handlers (A2A, HTTP, MCP)
-bond/tool/schema/            JSON Schema generation and structured output validation
-bond/tool/toolmcp/           MCP server tool adapter
+bond/tool/                   Tool infrastructure (schema, MCP adapter, structured output)
 bond/extra/delegation/       A2A tool delegation (client + server)
 bond/extra/toolregistry/     Tool discovery gateway plugin
 bond/bondtest/               Test utilities (deterministic agent, event helpers)
@@ -277,7 +276,7 @@ Equip your agent with tools from any MCP server:
 
 ```go
 session, _ := client.Connect(ctx, transport, nil)
-tools, _ := toolmcp.ServerTools(ctx, session)
+tools, _ := tool.FromMCP(ctx, session)
 
 bond.Stream(ctx, agent, msgs, bond.AgentOptions{Tools: tools})
 ```

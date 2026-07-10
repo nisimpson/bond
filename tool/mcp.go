@@ -1,7 +1,7 @@
 // Package toolmcp adapts MCP server tools for use in bond agent loops.
 // It bridges the Model Context Protocol SDK's client session to bond's
 // Tool interface, allowing bond agents to invoke tools hosted on MCP servers.
-package toolmcp
+package tool
 
 import (
 	"context"
@@ -22,7 +22,7 @@ type Session interface {
 // ServerTools discovers tools from an MCP server session and returns them
 // as bond Tools. Each returned tool delegates execution to the MCP server
 // via CallTool.
-func ServerTools(ctx context.Context, session Session) ([]bond.Tool, error) {
+func FromMCP(ctx context.Context, session Session) ([]bond.Tool, error) {
 	result, err := session.ListTools(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("toolmcp: list tools: %w", err)
