@@ -10,13 +10,19 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Install
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.25.x
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Lint
-        run: make lint
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Tidy
+        run: |
+          go fmt ./...
+          go mod tidy -v
+      - name: No Dirty
+        run: git diff --exit-code
+      - name: Vet
+        run: go vet ./...
       - name: Test
-        run: make test
+        run: go test -race -count=1 -timeout 60s ./...
