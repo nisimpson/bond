@@ -1,12 +1,12 @@
-package helix
+package bond
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 
-	"github.com/nisimpson/helix/internal/must"
-	"github.com/nisimpson/helix/internal/validate"
+	"github.com/nisimpson/bond/internal/must"
+	"github.com/nisimpson/bond/internal/validate"
 )
 
 // Tool represents a tool the agent can invoke during streaming.

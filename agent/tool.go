@@ -1,4 +1,4 @@
-// Package agent provides utilities for using helix agents as tools,
+// Package agent provides utilities for using bond agents as tools,
 // enabling sub-agent orchestration patterns.
 package agent
 
@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nisimpson/helix"
+	"github.com/nisimpson/bond"
 )
 
 // ToolOptions configures an agent-backed tool.
@@ -20,7 +20,7 @@ type ToolOptions struct {
 	// InputSchema describes the expected input. Defaults to {"prompt": string}.
 	InputSchema json.Marshaler
 	// StreamOptions configures the sub-agent's loop (tools, hooks, plugins, max turns).
-	StreamOptions helix.StreamOptions
+	StreamOptions bond.AgentOptions
 }
 
 // agentToolInput is the default input contract.
@@ -33,9 +33,9 @@ type agentToolOutput struct {
 	Response string `json:"response"`
 }
 
-// agentTool wraps a helix.Agent as a helix.Tool.
+// agentTool wraps a bond.Agent as a bond.Tool.
 type agentTool struct {
-	agent helix.Agent
+	agent bond.Agent
 	opts  ToolOptions
 }
 
@@ -43,20 +43,20 @@ func (t *agentTool) Name() string                { return t.opts.Name }
 func (t *agentTool) Description() string         { return t.opts.Description }
 func (t *agentTool) InputSchema() json.Marshaler { return t.opts.InputSchema }
 
-func (t *agentTool) Run(ctx context.Context, input json.RawMessage) ([]helix.Block, error) {
+func (t *agentTool) Run(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
 	var in agentToolInput
 	if err := json.Unmarshal(input, &in); err != nil {
 		return nil, fmt.Errorf("agent tool %q: unmarshal input: %w", t.opts.Name, err)
 	}
 
-	messages := helix.TextPrompt(in.Prompt)
+	messages := bond.TextPrompt(in.Prompt)
 
 	var buf strings.Builder
-	for event, err := range helix.Stream(ctx, t.agent, messages, t.opts.StreamOptions) {
+	for event, err := range bond.Stream(ctx, t.agent, messages, t.opts.StreamOptions) {
 		if err != nil {
 			return nil, fmt.Errorf("agent tool %q: %w", t.opts.Name, err)
 		}
-		if event.Type == helix.StreamEventTextDelta {
+		if event.Type == bond.StreamEventTextDelta {
 			buf.WriteString(event.TextDelta)
 		}
 	}
@@ -67,16 +67,16 @@ func (t *agentTool) Run(ctx context.Context, input json.RawMessage) ([]helix.Blo
 		return nil, fmt.Errorf("agent tool %q: marshal output: %w", t.opts.Name, err)
 	}
 
-	return []helix.Block{&helix.TextBlock{Text: string(data)}}, nil
+	return []bond.Block{&bond.TextBlock{Text: string(data)}}, nil
 }
 
-// AsTool wraps any [helix.Agent] as a [helix.Tool]. When invoked, it runs
+// AsTool wraps any [bond.Agent] as a [bond.Tool]. When invoked, it runs
 // the full agent loop using the input prompt and returns the collected text
 // response as the tool result.
 //
 // The default input schema expects {"prompt": "..."} and the output
 // returns {"response": "..."}.
-func AsTool(a helix.Agent, opts ToolOptions) helix.Tool {
+func AsTool(a bond.Agent, opts ToolOptions) bond.Tool {
 	if opts.InputSchema == nil {
 		opts.InputSchema = defaultInputSchema()
 	}

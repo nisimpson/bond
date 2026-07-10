@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/nisimpson/helix"
+	"github.com/nisimpson/bond"
 )
 
 // structuredTool wraps a Tool and validates its output against a JSON Schema.
 type structuredTool struct {
-	inner        helix.Tool
+	inner        bond.Tool
 	outputSchema Schema
 }
 
@@ -18,7 +18,7 @@ func (t *structuredTool) Name() string                { return t.inner.Name() }
 func (t *structuredTool) Description() string         { return t.inner.Description() }
 func (t *structuredTool) InputSchema() json.Marshaler { return t.inner.InputSchema() }
 
-func (t *structuredTool) Run(ctx context.Context, input json.RawMessage) ([]helix.Block, error) {
+func (t *structuredTool) Run(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
 	blocks, err := t.inner.Run(ctx, input)
 	if err != nil {
 		return nil, err
@@ -26,7 +26,7 @@ func (t *structuredTool) Run(ctx context.Context, input json.RawMessage) ([]heli
 
 	// Validate each text block's content against the output schema.
 	for _, b := range blocks {
-		tb, ok := b.(*helix.TextBlock)
+		tb, ok := b.(*bond.TextBlock)
 		if !ok {
 			continue
 		}
@@ -51,7 +51,7 @@ func (t *structuredTool) Run(ctx context.Context, input json.RawMessage) ([]heli
 // Example:
 //
 //	wrapped := schema.EnforceStructuredOutput[MyOutput](baseTool)
-func EnforceStructuredOutput[Out any](tool helix.Tool) helix.Tool {
+func EnforceStructuredOutput[Out any](tool bond.Tool) bond.Tool {
 	return &structuredTool{
 		inner:        tool,
 		outputSchema: For[Out](),

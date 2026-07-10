@@ -1,6 +1,7 @@
-package helix
+package bond
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 )
@@ -78,3 +79,71 @@ func (*TextBlock) blockType() BlockType       { return BlockTypeText }
 func (*MediaBlock) blockType() BlockType      { return BlockTypeMedia }
 func (*ToolResultBlock) blockType() BlockType { return BlockTypeToolResult }
 func (*ToolUseBlock) blockType() BlockType    { return BlockTypeToolUse }
+
+// TextPrompt is a convenience helper that wraps a plain string into
+// the []Message format expected by Agent.Stream.
+func TextPrompt(text string) []Message {
+	return []Message{
+		{
+			Role:    RoleUser,
+			Content: []Block{&TextBlock{Text: text}},
+		},
+	}
+}
+
+// ImagePrompt creates a user message with text and an image from a URI.
+func ImagePrompt(text, imageURI, mimeType string) []Message {
+	return []Message{
+		{
+			Role: RoleUser,
+			Content: []Block{
+				&TextBlock{Text: text},
+				&MediaBlock{Type: MediaTypeImage, MIMEType: mimeType, SourceURI: imageURI},
+			},
+		},
+	}
+}
+
+// MultiBlockPrompt creates a user message from arbitrary blocks.
+func MultiBlockPrompt(blocks ...Block) []Message {
+	return []Message{
+		{
+			Role:    RoleUser,
+			Content: blocks,
+		},
+	}
+}
+
+// Conversation builds a message list from alternating user/assistant strings.
+// The first string is user, second is assistant, third is user, etc.
+// Useful for constructing few-shot examples or test fixtures.
+func Conversation(turns ...string) []Message {
+	messages := make([]Message, len(turns))
+	for i, text := range turns {
+		role := RoleUser
+		if i%2 == 1 {
+			role = RoleAssistant
+		}
+		messages[i] = Message{
+			Role:    role,
+			Content: []Block{&TextBlock{Text: text}},
+		}
+	}
+	return messages
+}
+
+// toolsContextKey is the context key for tools available to the agent.
+type toolsContextKey struct{}
+
+// withTools attaches tools to a context for providers to access.
+func withTools(ctx context.Context, tools []Tool) context.Context {
+	return context.WithValue(ctx, toolsContextKey{}, tools)
+}
+
+// ToolsFromContext retrieves the tools available for the current invocation.
+// Providers use this to include tool definitions in API requests. Returns nil
+// if no tools are configured.
+func ToolsFromContext(ctx context.Context) []Tool {
+	tools, _ := ctx.Value(toolsContextKey{}).([]Tool)
+	return tools
+}

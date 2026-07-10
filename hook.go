@@ -1,4 +1,4 @@
-package helix
+package bond
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 // ErrAbort is returned by a hook to signal that the current operation
 // should be cancelled. Use with Before* hooks to prevent execution.
-var ErrAbort = errors.New("helix: operation aborted by hook")
+var ErrAbort = errors.New("bond: operation aborted by hook")
 
 // HookEvent is the sealed interface for all hook event types.
 type HookEvent interface {
@@ -35,7 +35,8 @@ func (fn HookFunc[T]) NotifyHookEvent(ctx context.Context, event HookEvent) erro
 
 // HookRegistry manages hooks keyed by event type.
 type HookRegistry struct {
-	hooks sync.Map // map[reflect.Type][]Hook
+	mu    sync.Mutex
+	hooks map[reflect.Type][]Hook
 }
 
 // On registers a hook for the event type T. The type is inferred from the
@@ -43,23 +44,12 @@ type HookRegistry struct {
 // order (FIFO) when Notify is called for the corresponding event type.
 func On[T HookEvent](r *HookRegistry, hook HookFunc[T]) {
 	key := reflect.TypeFor[T]()
-	for {
-		existing, _ := r.hooks.Load(key)
-		var list []Hook
-		if existing != nil {
-			list = existing.([]Hook)
-		}
-		updated := append(list, hook)
-		if existing == nil {
-			if _, loaded := r.hooks.LoadOrStore(key, updated); !loaded {
-				return
-			}
-		} else {
-			if r.hooks.CompareAndSwap(key, existing, updated) {
-				return
-			}
-		}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.hooks == nil {
+		r.hooks = make(map[reflect.Type][]Hook)
 	}
+	r.hooks[key] = append(r.hooks[key], hook)
 }
 
 // Notify dispatches an event to all registered hooks for that event type.
@@ -67,13 +57,16 @@ func On[T HookEvent](r *HookRegistry, hook HookFunc[T]) {
 // the joined error will contain it (check with errors.Is).
 func (r *HookRegistry) Notify(ctx context.Context, event HookEvent) error {
 	key := reflect.TypeOf(event)
-	val, ok := r.hooks.Load(key)
-	if !ok {
+	r.mu.Lock()
+	hooks := r.hooks[key]
+	r.mu.Unlock()
+
+	if len(hooks) == 0 {
 		return nil
 	}
 
 	var errs []error
-	for _, hook := range val.([]Hook) {
+	for _, hook := range hooks {
 		if err := hook.NotifyHookEvent(ctx, event); err != nil {
 			errs = append(errs, err)
 		}

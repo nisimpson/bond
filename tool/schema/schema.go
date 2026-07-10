@@ -1,5 +1,5 @@
 // Package schema provides JSON Schema generation and validation helpers
-// for helix tools. It wraps github.com/google/jsonschema-go/jsonschema to
+// for bond tools. It wraps github.com/google/jsonschema-go/jsonschema to
 // derive schemas from Go types and validate data against them.
 package schema
 
@@ -31,7 +31,7 @@ func (s Schema) Validate(data any) error {
 
 // For derives a JSON Schema from the Go type T using struct tags
 // (json, jsonschema). Returns a Schema suitable for use as
-// helix.FuncToolOptions.InputSchema or OutputSchema.
+// bond.FuncToolOptions.InputSchema or OutputSchema.
 //
 // Example:
 //

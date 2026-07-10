@@ -6,7 +6,7 @@ import (
 	"iter"
 	"strings"
 
-	"github.com/nisimpson/helix"
+	"github.com/nisimpson/bond"
 )
 
 // EndNode is the sentinel name indicating the graph should stop execution.
@@ -16,16 +16,15 @@ const EndNode = "__end__"
 // node to transition to. Return [EndNode] to terminate.
 type EdgeCondition func(state State) string
 
-// ActionFunc is a non-agentic node that performs an action and optionally
-// returns messages to append to the conversation history.
-type ActionFunc func(ctx context.Context, state State) ([]helix.Message, error)
+// ActionFunc is a non-agentic node that performs an action (typically state mutation).
+type ActionFunc func(ctx context.Context, state State) error
 
 // GraphNode represents a node in the agent graph. A node is either an agent
 // node (Agent is set) or an action node (Action is set), not both.
 type GraphNode struct {
-	// Agent node — runs helix.Stream with tools and hooks.
-	Agent   helix.Agent
-	Options helix.StreamOptions
+	// Agent node — runs bond.Stream with tools and hooks.
+	Agent   bond.Agent
+	Options bond.AgentOptions
 
 	// Action node — runs a function that can read/write state.
 	// Mutually exclusive with Agent.
@@ -45,10 +44,10 @@ type GraphOptions struct {
 }
 
 // Graph is an agent that orchestrates execution across a directed graph of
-// sub-agents and action nodes. Each agent node runs its own [helix.Stream]
+// sub-agents and action nodes. Each agent node runs its own [bond.Stream]
 // loop internally; the graph yields events transparently to the caller.
 //
-// Graph implements [helix.Agent].
+// Graph implements [bond.Agent].
 //
 // Example:
 //
@@ -62,11 +61,11 @@ type GraphOptions struct {
 //
 //	// Action node — pure function, no LLM. Reads/writes state directly.
 //	g.AddNode("fetch_order", &agent.GraphNode{
-//	    Action: func(ctx context.Context, state agent.State) ([]helix.Message, error) {
+//	    Action: func(ctx context.Context, state agent.State) error {
 //	        orderID, _ := state.Get("order_id")
 //	        order := db.FetchOrder(ctx, orderID.(string))
 //	        state.Set("order", order)
-//	        return nil, nil
+//	        return nil
 //	    },
 //	})
 //
@@ -85,7 +84,7 @@ type GraphOptions struct {
 //	})
 //
 //	// Use like any other agent.
-//	for event, err := range helix.Stream(ctx, g, helix.TextPrompt("help me"), helix.StreamOptions{}) {
+//	for event, err := range bond.Stream(ctx, g, bond.TextPrompt("help me"), bond.StreamOptions{}) {
 //	    // events flow transparently from all nodes
 //	}
 type Graph struct {
@@ -99,7 +98,7 @@ type Graph struct {
 func NewGraph(entry string, opts GraphOptions) *Graph {
 	state := opts.State
 	if state == nil {
-		state = make(MapState)
+		state = NewMapState()
 	}
 	return &Graph{
 		nodes: make(map[string]*GraphNode),
@@ -125,46 +124,41 @@ func (g *Graph) AddConditionalEdge(from string, condition EdgeCondition) {
 	g.edges[from] = append(g.edges[from], edge{condition: condition})
 }
 
-// Stream implements [helix.Agent]. It walks the graph starting from the entry
+// Stream implements [bond.Agent]. It walks the graph starting from the entry
 // node, running each node's agent or action and forwarding events to the caller.
-func (g *Graph) Stream(ctx context.Context, messages []helix.Message) iter.Seq2[helix.StreamEvent, error] {
-	return func(yield func(helix.StreamEvent, error) bool) {
-		if !yield(helix.StreamEvent{Type: helix.StreamEventStart}, nil) {
+func (g *Graph) Stream(ctx context.Context, messages []bond.Message) iter.Seq2[bond.StreamEvent, error] {
+	return func(yield func(bond.StreamEvent, error) bool) {
+		if !yield(bond.StreamEvent{Type: bond.StreamEventStart}, nil) {
 			return
 		}
 
 		// Attach state to context so tools can access it.
 		ctx = withState(ctx, g.state)
-		history := append([]helix.Message{}, messages...)
+		history := append([]bond.Message{}, messages...)
 		current := g.entry
 
 		for current != EndNode {
 			if ctx.Err() != nil {
-				yield(helix.StreamEvent{}, ctx.Err())
+				yield(bond.StreamEvent{}, ctx.Err())
 				return
 			}
 
 			node, exists := g.nodes[current]
 			if !exists {
-				yield(helix.StreamEvent{}, fmt.Errorf("graph: unknown node %q", current))
+				yield(bond.StreamEvent{}, fmt.Errorf("graph: unknown node %q", current))
 				return
 			}
 
 			if node.Agent != nil {
-				ok := g.runAgentNode(ctx, node, history, yield)
+				newHistory, ok := g.runAgentNode(ctx, node, history, yield)
 				if !ok {
 					return
 				}
-				// Append the last assistant text to history.
-				// (already accumulated inside runAgentNode)
+				history = newHistory
 			} else if node.Action != nil {
-				msgs, err := node.Action(ctx, g.state)
-				if err != nil {
-					yield(helix.StreamEvent{}, fmt.Errorf("graph: action node %q: %w", current, err))
+				if err := node.Action(ctx, g.state); err != nil {
+					yield(bond.StreamEvent{}, fmt.Errorf("graph: action node %q: %w", current, err))
 					return
-				}
-				if len(msgs) > 0 {
-					history = append(history, msgs...)
 				}
 			}
 
@@ -172,42 +166,42 @@ func (g *Graph) Stream(ctx context.Context, messages []helix.Message) iter.Seq2[
 			current = g.nextNode(current)
 		}
 
-		yield(helix.StreamEvent{Type: helix.StreamEventStop, StopReason: helix.StopReasonEnd}, nil)
+		yield(bond.StreamEvent{Type: bond.StreamEventStop, StopReason: bond.StopReasonEnd}, nil)
 	}
 }
 
 // runAgentNode executes an agent node, forwarding events and appending
 // the accumulated text to history. Returns false if yield was cancelled.
-func (g *Graph) runAgentNode(ctx context.Context, node *GraphNode, history []helix.Message, yield func(helix.StreamEvent, error) bool) bool {
+func (g *Graph) runAgentNode(ctx context.Context, node *GraphNode, history []bond.Message, yield func(bond.StreamEvent, error) bool) ([]bond.Message, bool) {
 	// Prepend state tools to the node's options.
 	opts := node.Options
 	opts.Tools = append(stateTools(g.state), opts.Tools...)
 
 	var textBuf strings.Builder
-	for event, err := range helix.Stream(ctx, node.Agent, history, opts) {
+	for event, err := range bond.Stream(ctx, node.Agent, history, opts) {
 		if err != nil {
-			yield(helix.StreamEvent{}, err)
-			return false
+			yield(bond.StreamEvent{}, err)
+			return nil, false
 		}
 
 		if !yield(event, nil) {
-			return false
+			return nil, false
 		}
 
-		if event.Type == helix.StreamEventTextDelta {
+		if event.Type == bond.StreamEventTextDelta {
 			textBuf.WriteString(event.TextDelta)
 		}
 	}
 
 	// Append assistant output to shared history.
 	if textBuf.Len() > 0 {
-		history = append(history, helix.Message{
-			Role:    helix.RoleAssistant,
-			Content: []helix.Block{&helix.TextBlock{Text: textBuf.String()}},
+		history = append(history, bond.Message{
+			Role:    bond.RoleAssistant,
+			Content: []bond.Block{&bond.TextBlock{Text: textBuf.String()}},
 		})
 	}
 
-	return true
+	return history, true
 }
 
 // nextNode evaluates outgoing edges from the current node and returns the
@@ -232,4 +226,4 @@ func (g *Graph) nextNode(current string) string {
 }
 
 // Verify interface compliance.
-var _ helix.Agent = (*Graph)(nil)
+var _ bond.Agent = (*Graph)(nil)

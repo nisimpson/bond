@@ -7,13 +7,13 @@ import (
 	"iter"
 	"strings"
 
-	"github.com/nisimpson/helix"
+	"github.com/nisimpson/bond"
 )
 
 // SwarmAgent represents a named agent in the swarm.
 type SwarmAgent struct {
-	Agent   helix.Agent
-	Options helix.StreamOptions
+	Agent   bond.Agent
+	Options bond.AgentOptions
 	// Description tells other agents when and why to transfer to this one.
 	// This becomes the transfer tool's description that the active agent sees.
 	Description string
@@ -31,7 +31,7 @@ type SwarmOptions struct {
 // Each agent can transfer control to another by calling a `transfer_to_<name>`
 // tool. The receiving agent picks up with the full conversation history.
 //
-// Swarm implements [helix.Agent].
+// Swarm implements [bond.Agent].
 //
 // Example:
 //
@@ -44,7 +44,7 @@ type SwarmOptions struct {
 //	s.AddAgent("tech", &agent.SwarmAgent{Agent: techAgent, Options: techOpts})
 //
 //	// Use like any other agent. Agents transfer between each other via tool calls.
-//	for event, err := range helix.Stream(ctx, s, helix.TextPrompt("my bill is wrong"), helix.StreamOptions{}) {
+//	for event, err := range bond.Stream(ctx, s, bond.TextPrompt("my bill is wrong"), bond.StreamOptions{}) {
 //	    fmt.Print(event.TextDelta)
 //	}
 type Swarm struct {
@@ -58,7 +58,7 @@ type Swarm struct {
 func NewSwarm(entry string, opts SwarmOptions) *Swarm {
 	state := opts.State
 	if state == nil {
-		state = make(MapState)
+		state = NewMapState()
 	}
 	return &Swarm{
 		agents: make(map[string]*SwarmAgent),
@@ -73,28 +73,28 @@ func (s *Swarm) AddAgent(name string, agent *SwarmAgent) {
 	s.agents[name] = agent
 }
 
-// Stream implements [helix.Agent]. It runs the active agent and handles
+// Stream implements [bond.Agent]. It runs the active agent and handles
 // transfer_to_<name> tool calls to switch between agents.
-func (s *Swarm) Stream(ctx context.Context, messages []helix.Message) iter.Seq2[helix.StreamEvent, error] {
-	return func(yield func(helix.StreamEvent, error) bool) {
-		if !yield(helix.StreamEvent{Type: helix.StreamEventStart}, nil) {
+func (s *Swarm) Stream(ctx context.Context, messages []bond.Message) iter.Seq2[bond.StreamEvent, error] {
+	return func(yield func(bond.StreamEvent, error) bool) {
+		if !yield(bond.StreamEvent{Type: bond.StreamEventStart}, nil) {
 			return
 		}
 
 		ctx = withState(ctx, s.state)
-		history := append([]helix.Message{}, messages...)
+		history := append([]bond.Message{}, messages...)
 		active := s.entry
 		handoffs := 0
 
 		for {
 			if ctx.Err() != nil {
-				yield(helix.StreamEvent{}, ctx.Err())
+				yield(bond.StreamEvent{}, ctx.Err())
 				return
 			}
 
 			agent, exists := s.agents[active]
 			if !exists {
-				yield(helix.StreamEvent{}, fmt.Errorf("swarm: unknown agent %q", active))
+				yield(bond.StreamEvent{}, fmt.Errorf("swarm: unknown agent %q", active))
 				return
 			}
 
@@ -106,14 +106,14 @@ func (s *Swarm) Stream(ctx context.Context, messages []helix.Message) iter.Seq2[
 			var textBuf strings.Builder
 			var transferTo string
 
-			for event, err := range helix.Stream(ctx, agent.Agent, history, opts) {
+			for event, err := range bond.Stream(ctx, agent.Agent, history, opts) {
 				if err != nil {
-					yield(helix.StreamEvent{}, err)
+					yield(bond.StreamEvent{}, err)
 					return
 				}
 
 				// Check for transfer tool calls in events.
-				if event.Type == helix.StreamEventToolUse && event.ToolUse != nil {
+				if event.Type == bond.StreamEventToolUse && event.ToolUse != nil {
 					if name, ok := s.isTransferTool(event.ToolUse.Name); ok {
 						transferTo = name
 					}
@@ -123,16 +123,16 @@ func (s *Swarm) Stream(ctx context.Context, messages []helix.Message) iter.Seq2[
 					return
 				}
 
-				if event.Type == helix.StreamEventTextDelta {
+				if event.Type == bond.StreamEventTextDelta {
 					textBuf.WriteString(event.TextDelta)
 				}
 			}
 
 			// Append assistant output to history.
 			if textBuf.Len() > 0 {
-				history = append(history, helix.Message{
-					Role:    helix.RoleAssistant,
-					Content: []helix.Block{&helix.TextBlock{Text: textBuf.String()}},
+				history = append(history, bond.Message{
+					Role:    bond.RoleAssistant,
+					Content: []bond.Block{&bond.TextBlock{Text: textBuf.String()}},
 				})
 			}
 
@@ -151,13 +151,13 @@ func (s *Swarm) Stream(ctx context.Context, messages []helix.Message) iter.Seq2[
 			active = transferTo
 		}
 
-		yield(helix.StreamEvent{Type: helix.StreamEventStop, StopReason: helix.StopReasonEnd}, nil)
+		yield(bond.StreamEvent{Type: bond.StreamEventStop, StopReason: bond.StopReasonEnd}, nil)
 	}
 }
 
 // buildTools creates transfer tools for all agents except the active one,
 // plus the shared state tools.
-func (s *Swarm) buildTools(active string) []helix.Tool {
+func (s *Swarm) buildTools(active string) []bond.Tool {
 	tools := stateTools(s.state)
 	for name, sa := range s.agents {
 		if name == active {
@@ -196,9 +196,9 @@ func (t *transferTool) Description() string { return t.description }
 func (t *transferTool) InputSchema() json.Marshaler {
 	return json.RawMessage(`{"type":"object","properties":{}}`)
 }
-func (t *transferTool) Run(ctx context.Context, input json.RawMessage) ([]helix.Block, error) {
-	return []helix.Block{&helix.TextBlock{Text: fmt.Sprintf("Transferring to %s...", t.target)}}, nil
+func (t *transferTool) Run(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
+	return []bond.Block{&bond.TextBlock{Text: fmt.Sprintf("Transferring to %s...", t.target)}}, nil
 }
 
 // Verify interface compliance.
-var _ helix.Agent = (*Swarm)(nil)
+var _ bond.Agent = (*Swarm)(nil)

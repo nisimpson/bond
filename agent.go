@@ -1,4 +1,4 @@
-package helix
+package bond
 
 import (
 	"context"
@@ -70,10 +70,9 @@ type Agent interface {
 	Stream(ctx context.Context, messages []Message) iter.Seq2[StreamEvent, error]
 }
 
-// StreamOptions configures the agent loop.
-type StreamOptions struct {
+// AgentOptions configures the agent loop.
+type AgentOptions struct {
 	Tools    []Tool
-	Hooks    *HookRegistry
 	Plugins  []Plugin
 	MaxTurns int // max tool-use round-trips; 0 means unlimited
 }
@@ -84,7 +83,7 @@ type streamLoop struct {
 	tools   map[string]Tool
 	hooks   *HookRegistry
 	history []Message
-	opts    StreamOptions
+	opts    AgentOptions
 	turns   int
 }
 
@@ -100,23 +99,21 @@ func (l *streamLoop) notify(ctx context.Context, event HookEvent) error {
 // model requests tool use, it executes the tools, appends results to the
 // conversation, and re-invokes the provider. Events are yielded to the caller
 // transparently across turns.
-func Stream(ctx context.Context, agent Agent, messages []Message, opts StreamOptions) iter.Seq2[StreamEvent, error] {
-	// Ensure we have a registry (plugins and hooks need one).
-	if opts.Hooks == nil {
-		opts.Hooks = &HookRegistry{}
-	}
+func Stream(ctx context.Context, agent Agent, messages []Message, opts AgentOptions) iter.Seq2[StreamEvent, error] {
+	// Create an internal registry for plugins to register hooks.
+	registry := &HookRegistry{}
 
 	// Collect tools from options and plugins.
 	allTools := append([]Tool{}, opts.Tools...)
 	for _, p := range opts.Plugins {
 		allTools = append(allTools, p.Tools()...)
-		p.Init(opts.Hooks)
+		p.Init(registry)
 	}
 
 	loop := &streamLoop{
 		agent:   agent,
 		tools:   indexTools(allTools),
-		hooks:   opts.Hooks,
+		hooks:   registry,
 		history: append([]Message{}, messages...),
 		opts:    opts,
 	}
@@ -130,6 +127,15 @@ func indexTools(tools []Tool) map[string]Tool {
 		m[t.Name()] = t
 	}
 	return m
+}
+
+// toolSlice returns the tools as a slice (for passing into context).
+func (l *streamLoop) toolSlice() []Tool {
+	tools := make([]Tool, 0, len(l.tools))
+	for _, t := range l.tools {
+		tools = append(tools, t)
+	}
+	return tools
 }
 
 // run is the top-level iterator that drives the agent loop.
@@ -165,19 +171,19 @@ func (l *streamLoop) run(ctx context.Context) iter.Seq2[StreamEvent, error] {
 			}
 
 			// AfterModelInvoke
-			l.notify(ctx, &AfterModelInvokeHook{Blocks: blocks, StopReason: stopReason})
+			_ = l.notify(ctx, &AfterModelInvokeHook{Blocks: blocks, StopReason: stopReason})
 
 			assistantMsg := Message{Role: RoleAssistant, Content: blocks}
 			l.history = append(l.history, assistantMsg)
-			l.notify(ctx, &OnMessageAppendedHook{Message: assistantMsg})
+			_ = l.notify(ctx, &OnMessageAppendedHook{Message: assistantMsg})
 
 			if stopReason != StopReasonToolUse {
-				l.notify(ctx, &AfterStreamHook{Messages: l.history})
+				_ = l.notify(ctx, &AfterStreamHook{Messages: l.history})
 				return
 			}
 
 			if l.maxTurnsReached() {
-				l.notify(ctx, &AfterStreamHook{Messages: l.history})
+				_ = l.notify(ctx, &AfterStreamHook{Messages: l.history})
 				return
 			}
 
@@ -185,7 +191,7 @@ func (l *streamLoop) run(ctx context.Context) iter.Seq2[StreamEvent, error] {
 
 			toolMsg := Message{Role: RoleUser, Content: results}
 			l.history = append(l.history, toolMsg)
-			l.notify(ctx, &OnMessageAppendedHook{Message: toolMsg})
+			_ = l.notify(ctx, &OnMessageAppendedHook{Message: toolMsg})
 		}
 	}
 }
@@ -198,14 +204,14 @@ func (l *streamLoop) consumeStream(ctx context.Context, yield func(StreamEvent, 
 	var blocks []Block
 	var stopReason StopReason
 
-	for event, err := range l.agent.Stream(ctx, l.history) {
+	for event, err := range l.agent.Stream(withTools(ctx, l.toolSlice()), l.history) {
 		if err != nil {
 			yield(StreamEvent{}, err)
 			return nil, "", false
 		}
 
 		// OnStreamEvent
-		l.notify(ctx, &OnStreamEventHook{Event: event})
+		_ = l.notify(ctx, &OnStreamEventHook{Event: event})
 
 		if !yield(event, nil) {
 			return nil, "", false
@@ -252,7 +258,7 @@ func (l *streamLoop) executeTools(ctx context.Context, blocks []Block) []Block {
 	}
 
 	// BeforeToolCycle
-	l.notify(ctx, &BeforeToolCycleHook{ToolCalls: toolCalls})
+	_ = l.notify(ctx, &BeforeToolCycleHook{ToolCalls: toolCalls})
 
 	results := make([]*ToolResultBlock, len(toolCalls))
 	var wg sync.WaitGroup
@@ -267,7 +273,7 @@ func (l *streamLoop) executeTools(ctx context.Context, blocks []Block) []Block {
 	wg.Wait()
 
 	// AfterToolCycle
-	l.notify(ctx, &AfterToolCycleHook{Results: results})
+	_ = l.notify(ctx, &AfterToolCycleHook{Results: results})
 
 	out := make([]Block, len(results))
 	for i, r := range results {
@@ -294,7 +300,7 @@ func (l *streamLoop) runTool(ctx context.Context, tu *ToolUseBlock) *ToolResultB
 			Content:   []Block{&TextBlock{Text: "error: unknown tool: " + tu.Name}},
 			IsError:   true,
 		}
-		l.notify(ctx, &AfterToolCallHook{ToolUse: tu, Result: result})
+		_ = l.notify(ctx, &AfterToolCallHook{ToolUse: tu, Result: result})
 		return result
 	}
 
@@ -305,7 +311,7 @@ func (l *streamLoop) runTool(ctx context.Context, tu *ToolUseBlock) *ToolResultB
 			Content:   []Block{&TextBlock{Text: "error: " + err.Error()}},
 			IsError:   true,
 		}
-		l.notify(ctx, &AfterToolCallHook{ToolUse: tu, Result: result})
+		_ = l.notify(ctx, &AfterToolCallHook{ToolUse: tu, Result: result})
 		return result
 	}
 
@@ -313,17 +319,52 @@ func (l *streamLoop) runTool(ctx context.Context, tu *ToolUseBlock) *ToolResultB
 		ToolUseID: tu.ID,
 		Content:   output,
 	}
-	l.notify(ctx, &AfterToolCallHook{ToolUse: tu, Result: result})
+	_ = l.notify(ctx, &AfterToolCallHook{ToolUse: tu, Result: result})
 	return result
 }
 
-// TextPrompt is a convenience helper that wraps a plain string into
-// the []Message format expected by Agent.Stream.
-func TextPrompt(text string) []Message {
-	return []Message{
-		{
-			Role:    RoleUser,
-			Content: []Block{&TextBlock{Text: text}},
-		},
+// InvokeResponse holds the collected result of a synchronous agent invocation.
+type InvokeResponse struct {
+	// Text is the concatenated text output from the agent.
+	Text string
+	// Media contains any media content produced by the agent.
+	Media []Media
+	// StopReason indicates why the agent stopped.
+	StopReason StopReason
+}
+
+// Media represents a complete piece of media content in a response.
+type Media struct {
+	// MIMEType is the media type (e.g. "image/png", "audio/wav").
+	MIMEType string
+	// Data is the raw bytes.
+	Data []byte
+}
+
+// Invoke runs the full agent loop synchronously, collecting all streamed events
+// into a single [InvokeResponse]. This is a convenience wrapper over [Stream]
+// for cases where streaming is not needed.
+func Invoke(ctx context.Context, agent Agent, messages []Message, opts AgentOptions) (*InvokeResponse, error) {
+	resp := &InvokeResponse{}
+
+	for event, err := range Stream(ctx, agent, messages, opts) {
+		if err != nil {
+			return nil, err
+		}
+		switch event.Type {
+		case StreamEventTextDelta:
+			resp.Text += event.TextDelta
+		case StreamEventMediaDelta:
+			if event.MediaDelta != nil {
+				resp.Media = append(resp.Media, Media{
+					MIMEType: event.MediaDelta.MIMEType,
+					Data:     event.MediaDelta.Data,
+				})
+			}
+		case StreamEventStop:
+			resp.StopReason = event.StopReason
+		}
 	}
+
+	return resp, nil
 }
