@@ -67,7 +67,7 @@ func NewPlugin(opts Options) *Plugin {
 	return &Plugin{opts: opts, tools: tools}
 }
 
-func (p *Plugin) Name() string                      { return "delegation" }
+func (p *Plugin) Name() string                     { return "delegation" }
 func (p *Plugin) Tools() []bond.Tool               { return p.tools }
 func (p *Plugin) Init(registry *bond.HookRegistry) {}
 

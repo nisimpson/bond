@@ -100,7 +100,7 @@ func New(opts Options) *Plugin {
 	}
 }
 
-func (r *Plugin) Name() string                      { return "toolregistry" }
+func (r *Plugin) Name() string                     { return "toolregistry" }
 func (r *Plugin) Init(registry *bond.HookRegistry) {}
 
 // Tools returns the three meta-tools that the agent sees.

@@ -136,8 +136,8 @@ type fakeTool struct {
 	runFn func(context.Context, json.RawMessage) ([]bond.Block, error)
 }
 
-func (t *fakeTool) Name() string              { return t.name }
-func (t *fakeTool) Description() string       { return t.name }
+func (t *fakeTool) Name() string                { return t.name }
+func (t *fakeTool) Description() string         { return t.name }
 func (t *fakeTool) InputSchema() json.Marshaler { return json.RawMessage(`{"type":"object"}`) }
 func (t *fakeTool) Run(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
 	if t.runFn != nil {

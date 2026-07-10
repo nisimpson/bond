@@ -14,9 +14,9 @@ import (
 
 // mockSession implements the toolmcp.Session interface.
 type mockSession struct {
-	tools    []*mcp.Tool
-	listErr  error
-	callFn   func(ctx context.Context, params *mcp.CallToolParams) (*mcp.CallToolResult, error)
+	tools   []*mcp.Tool
+	listErr error
+	callFn  func(ctx context.Context, params *mcp.CallToolParams) (*mcp.CallToolResult, error)
 }
 
 func (m *mockSession) ListTools(_ context.Context, _ *mcp.ListToolsParams) (*mcp.ListToolsResult, error) {
