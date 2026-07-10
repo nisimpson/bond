@@ -1,7 +1,7 @@
 // Package schema provides JSON Schema generation and validation helpers
 // for bond tools. It wraps github.com/google/jsonschema-go/jsonschema to
 // derive schemas from Go types and validate data against them.
-package schema
+package tool
 
 import (
 	"encoding/json"
@@ -41,7 +41,7 @@ func (s Schema) Validate(data any) error {
 //	}
 //
 //	schema.For[AddInput]() // returns json.Marshaler with the derived schema
-func For[T any]() Schema {
+func SchemaFor[T any]() Schema {
 	s, err := jsonschema.For[T](nil)
 	if err != nil {
 		panic("schema: failed to infer schema: " + err.Error())

@@ -1,4 +1,4 @@
-package schema_test
+package tool_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/nisimpson/bond"
-	"github.com/nisimpson/bond/tool/schema"
+	"github.com/nisimpson/bond/tool"
 )
 
 type AddInput struct {
@@ -21,7 +21,7 @@ type PersonInput struct {
 }
 
 func TestFor_BasicStruct(t *testing.T) {
-	s := schema.For[AddInput]()
+	s := tool.SchemaFor[AddInput]()
 	data, err := s.MarshalJSON()
 	if err != nil {
 		t.Fatalf("failed to marshal schema: %v", err)
@@ -41,7 +41,7 @@ func TestFor_BasicStruct(t *testing.T) {
 }
 
 func TestFor_PersonStruct(t *testing.T) {
-	s := schema.For[PersonInput]()
+	s := tool.SchemaFor[PersonInput]()
 	data, err := s.MarshalJSON()
 	if err != nil {
 		t.Fatalf("failed to marshal schema: %v", err)
@@ -56,7 +56,7 @@ func TestFor_PersonStruct(t *testing.T) {
 }
 
 func TestSchema_Validate_Valid(t *testing.T) {
-	s := schema.For[AddInput]()
+	s := tool.SchemaFor[AddInput]()
 	data := map[string]any{"a": 1, "b": 2}
 	if err := s.Validate(data); err != nil {
 		t.Fatalf("expected valid, got %v", err)
@@ -64,7 +64,7 @@ func TestSchema_Validate_Valid(t *testing.T) {
 }
 
 func TestSchema_Validate_Invalid(t *testing.T) {
-	s := schema.For[AddInput]()
+	s := tool.SchemaFor[AddInput]()
 	// "a" should be integer, not string
 	data := map[string]any{"a": "not a number", "b": 2}
 	err := s.Validate(data)
@@ -74,7 +74,7 @@ func TestSchema_Validate_Invalid(t *testing.T) {
 }
 
 func TestSchema_MarshalJSON_IsValidJSON(t *testing.T) {
-	s := schema.For[AddInput]()
+	s := tool.SchemaFor[AddInput]()
 	data, err := s.MarshalJSON()
 	if err != nil {
 		t.Fatalf("failed to marshal: %v", err)
@@ -111,13 +111,13 @@ type OutputSchema struct {
 }
 
 func TestEnforceStructuredOutput_Valid(t *testing.T) {
-	tool := &mockTool{
+	baseTool := &mockTool{
 		name:        "add",
 		description: "adds numbers",
 		output:      `{"result": 42}`,
 	}
 
-	wrapped := schema.EnforceStructuredOutput[OutputSchema](tool)
+	wrapped := tool.EnforceStructuredOutput[OutputSchema](baseTool)
 
 	blocks, err := wrapped.Run(context.Background(), nil)
 	if err != nil {
@@ -136,13 +136,13 @@ func TestEnforceStructuredOutput_Valid(t *testing.T) {
 }
 
 func TestEnforceStructuredOutput_InvalidJSON(t *testing.T) {
-	tool := &mockTool{
+	baseTool := &mockTool{
 		name:        "add",
 		description: "adds numbers",
 		output:      `not json at all`,
 	}
 
-	wrapped := schema.EnforceStructuredOutput[OutputSchema](tool)
+	wrapped := tool.EnforceStructuredOutput[OutputSchema](baseTool)
 
 	_, err := wrapped.Run(context.Background(), nil)
 	if err == nil {
@@ -154,13 +154,13 @@ func TestEnforceStructuredOutput_InvalidJSON(t *testing.T) {
 }
 
 func TestEnforceStructuredOutput_SchemaViolation(t *testing.T) {
-	tool := &mockTool{
+	baseTool := &mockTool{
 		name:        "add",
 		description: "adds numbers",
 		output:      `{"result": "not a number"}`,
 	}
 
-	wrapped := schema.EnforceStructuredOutput[OutputSchema](tool)
+	wrapped := tool.EnforceStructuredOutput[OutputSchema](baseTool)
 
 	_, err := wrapped.Run(context.Background(), nil)
 	if err == nil {
@@ -172,13 +172,13 @@ func TestEnforceStructuredOutput_SchemaViolation(t *testing.T) {
 }
 
 func TestEnforceStructuredOutput_InnerError(t *testing.T) {
-	tool := &mockTool{
+	baseTool := &mockTool{
 		name:        "add",
 		description: "adds numbers",
 		err:         context.DeadlineExceeded,
 	}
 
-	wrapped := schema.EnforceStructuredOutput[OutputSchema](tool)
+	wrapped := tool.EnforceStructuredOutput[OutputSchema](baseTool)
 
 	_, err := wrapped.Run(context.Background(), nil)
 	if err == nil {
@@ -190,13 +190,13 @@ func TestEnforceStructuredOutput_InnerError(t *testing.T) {
 }
 
 func TestEnforceStructuredOutput_PreservesMetadata(t *testing.T) {
-	tool := &mockTool{
+	baseTool := &mockTool{
 		name:        "my-tool",
 		description: "my description",
 		output:      `{"result": 1}`,
 	}
 
-	wrapped := schema.EnforceStructuredOutput[OutputSchema](tool)
+	wrapped := tool.EnforceStructuredOutput[OutputSchema](baseTool)
 
 	if wrapped.Name() != "my-tool" {
 		t.Fatalf("expected 'my-tool', got %q", wrapped.Name())

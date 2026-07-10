@@ -1,4 +1,4 @@
-package toolmcp_test
+package tool_test
 
 import (
 	"context"
@@ -9,10 +9,10 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nisimpson/bond"
-	"github.com/nisimpson/bond/tool/toolmcp"
+	"github.com/nisimpson/bond/tool"
 )
 
-// mockSession implements the toolmcp.Session interface.
+// mockSession implements the tool.Session interface.
 type mockSession struct {
 	tools   []*mcp.Tool
 	listErr error
@@ -43,7 +43,7 @@ func TestServerTools_Success(t *testing.T) {
 		},
 	}
 
-	tools, err := toolmcp.ServerTools(context.Background(), session)
+	tools, err := tool.FromMCP(context.Background(), session)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestServerTools_ListError(t *testing.T) {
 		listErr: errors.New("connection refused"),
 	}
 
-	_, err := toolmcp.ServerTools(context.Background(), session)
+	_, err := tool.FromMCP(context.Background(), session)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -77,7 +77,7 @@ func TestServerTools_EmptyList(t *testing.T) {
 		tools: []*mcp.Tool{},
 	}
 
-	tools, err := toolmcp.ServerTools(context.Background(), session)
+	tools, err := tool.FromMCP(context.Background(), session)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestMCPTool_Description(t *testing.T) {
 		},
 	}
 
-	tools, err := toolmcp.ServerTools(context.Background(), session)
+	tools, err := tool.FromMCP(context.Background(), session)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestMCPTool_InputSchema(t *testing.T) {
 		},
 	}
 
-	tools, err := toolmcp.ServerTools(context.Background(), session)
+	tools, err := tool.FromMCP(context.Background(), session)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestMCPTool_Run_Success(t *testing.T) {
 		},
 	}
 
-	tools, err := toolmcp.ServerTools(context.Background(), session)
+	tools, err := tool.FromMCP(context.Background(), session)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestMCPTool_Run_EmptyInput(t *testing.T) {
 		},
 	}
 
-	tools, err := toolmcp.ServerTools(context.Background(), session)
+	tools, err := tool.FromMCP(context.Background(), session)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestMCPTool_Run_CallError(t *testing.T) {
 		},
 	}
 
-	tools, err := toolmcp.ServerTools(context.Background(), session)
+	tools, err := tool.FromMCP(context.Background(), session)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestMCPTool_Run_ToolReturnsError(t *testing.T) {
 		},
 	}
 
-	tools, err := toolmcp.ServerTools(context.Background(), session)
+	tools, err := tool.FromMCP(context.Background(), session)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestMCPTool_Run_InvalidJSON(t *testing.T) {
 		},
 	}
 
-	tools, err := toolmcp.ServerTools(context.Background(), session)
+	tools, err := tool.FromMCP(context.Background(), session)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

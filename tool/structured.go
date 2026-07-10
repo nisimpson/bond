@@ -1,4 +1,4 @@
-package schema
+package tool
 
 import (
 	"context"
@@ -54,6 +54,6 @@ func (t *structuredTool) Run(ctx context.Context, input json.RawMessage) ([]bond
 func EnforceStructuredOutput[Out any](tool bond.Tool) bond.Tool {
 	return &structuredTool{
 		inner:        tool,
-		outputSchema: For[Out](),
+		outputSchema: SchemaFor[Out](),
 	}
 }
