@@ -1,5 +1,3 @@
-// Package toolbox provides a set of reusable tools for Bond agents covering
-// shell command execution, HTTP fetching, file I/O, and environment variable access.
 package toolbox
 
 import (
@@ -87,19 +85,33 @@ type HTTPOutput struct {
 
 // FileReadInput is the input schema for the file read tool.
 type FileReadInput struct {
-	Path string `json:"path" jsonschema:"required,file path to read"`
+	Path      string `json:"path" jsonschema:"required,file path to read"`
+	StartLine *int   `json:"start_line,omitempty" jsonschema:"start line (1-based inclusive)"`
+	EndLine   *int   `json:"end_line,omitempty" jsonschema:"end line (1-based inclusive)"`
 }
 
 // FileReadOutput is the result of a file read.
 type FileReadOutput struct {
-	Content string `json:"content"`
-	Path    string `json:"path"`
+	Content    string `json:"content"`
+	Path       string `json:"path"`
+	TotalLines *int   `json:"total_lines,omitempty"`
 }
 
 // FileWriteInput is the input schema for the file write tool.
 type FileWriteInput struct {
-	Path    string `json:"path" jsonschema:"required,file path to write"`
-	Content string `json:"content" jsonschema:"required,content to write"`
+	Path    string           `json:"path" jsonschema:"required,file path to write"`
+	Mode    string           `json:"mode,omitempty" jsonschema:"write mode: write, replace, or patch"`
+	Content string           `json:"content,omitempty" jsonschema:"content to write (for write mode)"`
+	OldText string           `json:"old_text,omitempty" jsonschema:"text to find (for replace mode)"`
+	NewText string           `json:"new_text,omitempty" jsonschema:"replacement text (for replace mode)"`
+	Patches []PatchOperation `json:"patches,omitempty" jsonschema:"patch operations (for patch mode)"`
+}
+
+// PatchOperation specifies a single line-range edit.
+type PatchOperation struct {
+	StartLine int    `json:"start_line" jsonschema:"required,start line (1-based inclusive)"`
+	EndLine   int    `json:"end_line" jsonschema:"required,end line (1-based inclusive)"`
+	Content   string `json:"content" jsonschema:"required,replacement content for the line range"`
 }
 
 // FileWriteOutput is the result of a file write.

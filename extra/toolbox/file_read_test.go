@@ -12,6 +12,8 @@ import (
 	bond "github.com/nisimpson/bond"
 )
 
+func intPtr(i int) *int { return &i }
+
 // Validates: TBOX-3.1
 func TestFileRead_ValidUTF8File(t *testing.T) {
 	dir := t.TempDir()
@@ -218,4 +220,165 @@ func TestFileRead_RelativePathResolution(t *testing.T) {
 	if out.Content != "relative content" {
 		t.Errorf("expected content %q, got %q", "relative content", out.Content)
 	}
+}
+
+// TestFileRead_LineRange validates line-range reading behavior.
+// Validates: FTE-1.1, FTE-1.2, FTE-1.3, FTE-1.4, FTE-1.5, FTE-1.6, FTE-1.7, FTE-1.8, FTE-1.10
+func TestFileRead_LineRange(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "lines.txt")
+	// 5 lines of content
+	if err := os.WriteFile(filePath, []byte("line1\nline2\nline3\nline4\nline5"), 0644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	tool := newFileReadTool(&SandboxConfig{BaseDirectory: dir})
+
+	runRead := func(t *testing.T, input FileReadInput) (FileReadOutput, error) {
+		t.Helper()
+		raw, _ := json.Marshal(input)
+		blocks, err := tool.Run(context.Background(), raw)
+		if err != nil {
+			return FileReadOutput{}, err
+		}
+		if len(blocks) != 1 {
+			t.Fatalf("expected 1 block, got %d", len(blocks))
+		}
+		tb, ok := blocks[0].(*bond.TextBlock)
+		if !ok {
+			t.Fatal("expected TextBlock")
+		}
+		var out FileReadOutput
+		if err := json.Unmarshal([]byte(tb.Text), &out); err != nil {
+			t.Fatalf("unmarshal output: %v", err)
+		}
+		return out, nil
+	}
+
+	t.Run("full file read with no params (backward compat)", func(t *testing.T) {
+		// FTE-1.1: no start_line or end_line returns full file
+		out, err := runRead(t, FileReadInput{Path: filePath})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		expected := "line1\nline2\nline3\nline4\nline5"
+		if out.Content != expected {
+			t.Errorf("expected %q, got %q", expected, out.Content)
+		}
+		if out.TotalLines != nil {
+			t.Errorf("expected TotalLines to be nil when no range specified, got %d", *out.TotalLines)
+		}
+	})
+
+	t.Run("start_line only", func(t *testing.T) {
+		// FTE-1.2: start_line without end_line returns from start to end of file
+		out, err := runRead(t, FileReadInput{Path: filePath, StartLine: intPtr(3)})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		expected := "line3\nline4\nline5"
+		if out.Content != expected {
+			t.Errorf("expected %q, got %q", expected, out.Content)
+		}
+		if out.TotalLines == nil || *out.TotalLines != 5 {
+			t.Errorf("expected TotalLines=5, got %v", out.TotalLines)
+		}
+	})
+
+	t.Run("end_line only", func(t *testing.T) {
+		// FTE-1.10: end_line without start_line returns from line 1 through end_line
+		out, err := runRead(t, FileReadInput{Path: filePath, EndLine: intPtr(3)})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		expected := "line1\nline2\nline3"
+		if out.Content != expected {
+			t.Errorf("expected %q, got %q", expected, out.Content)
+		}
+		if out.TotalLines == nil || *out.TotalLines != 5 {
+			t.Errorf("expected TotalLines=5, got %v", out.TotalLines)
+		}
+	})
+
+	t.Run("both start and end", func(t *testing.T) {
+		// FTE-1.3: both start_line and end_line returns the specified range
+		out, err := runRead(t, FileReadInput{Path: filePath, StartLine: intPtr(2), EndLine: intPtr(4)})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		expected := "line2\nline3\nline4"
+		if out.Content != expected {
+			t.Errorf("expected %q, got %q", expected, out.Content)
+		}
+		if out.TotalLines == nil || *out.TotalLines != 5 {
+			t.Errorf("expected TotalLines=5, got %v", out.TotalLines)
+		}
+	})
+
+	t.Run("start_line less than 1 returns ErrValidation", func(t *testing.T) {
+		// FTE-1.4: start_line < 1 is a validation error
+		raw, _ := json.Marshal(FileReadInput{Path: filePath, StartLine: intPtr(0)})
+		_, err := tool.Run(context.Background(), raw)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !errors.Is(err, ErrValidation) {
+			t.Errorf("expected ErrValidation, got: %v", err)
+		}
+	})
+
+	t.Run("end_line less than start_line returns ErrValidation", func(t *testing.T) {
+		// FTE-1.5: end_line < start_line is a validation error
+		raw, _ := json.Marshal(FileReadInput{Path: filePath, StartLine: intPtr(4), EndLine: intPtr(2)})
+		_, err := tool.Run(context.Background(), raw)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !errors.Is(err, ErrValidation) {
+			t.Errorf("expected ErrValidation, got: %v", err)
+		}
+	})
+
+	t.Run("start_line exceeds total lines returns empty content", func(t *testing.T) {
+		// FTE-1.6: start > totalLines returns empty content with no error
+		out, err := runRead(t, FileReadInput{Path: filePath, StartLine: intPtr(10)})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.Content != "" {
+			t.Errorf("expected empty content, got %q", out.Content)
+		}
+		if out.TotalLines == nil || *out.TotalLines != 5 {
+			t.Errorf("expected TotalLines=5, got %v", out.TotalLines)
+		}
+	})
+
+	t.Run("end_line exceeds total lines clamps to last line", func(t *testing.T) {
+		// FTE-1.7: end_line > totalLines clamps to last line
+		out, err := runRead(t, FileReadInput{Path: filePath, StartLine: intPtr(3), EndLine: intPtr(100)})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		expected := "line3\nline4\nline5"
+		if out.Content != expected {
+			t.Errorf("expected %q, got %q", expected, out.Content)
+		}
+		if out.TotalLines == nil || *out.TotalLines != 5 {
+			t.Errorf("expected TotalLines=5, got %v", out.TotalLines)
+		}
+	})
+
+	t.Run("TotalLines set in output when range specified", func(t *testing.T) {
+		// FTE-1.8: TotalLines is populated when start_line or end_line is set
+		out, err := runRead(t, FileReadInput{Path: filePath, StartLine: intPtr(1), EndLine: intPtr(5)})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.TotalLines == nil {
+			t.Fatal("expected TotalLines to be non-nil when range is specified")
+		}
+		if *out.TotalLines != 5 {
+			t.Errorf("expected TotalLines=5, got %d", *out.TotalLines)
+		}
+	})
 }
