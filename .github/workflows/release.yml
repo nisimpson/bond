@@ -30,7 +30,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.25.x
+          go-version: 1.26.x
       - name: Checkout
         uses: actions/checkout@v4
       - name: Publish Module
