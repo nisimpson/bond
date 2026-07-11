@@ -170,12 +170,12 @@ func (l *streamLoop) run(ctx context.Context) iter.Seq2[StreamEvent, error] {
 				return
 			}
 
-			// AfterModelInvoke
+			// AfterModelInvoke (observer)
 			_ = l.notify(ctx, &AfterModelInvokeHook{Blocks: blocks, StopReason: stopReason})
 
 			assistantMsg := Message{Role: RoleAssistant, Content: blocks}
 			l.history = append(l.history, assistantMsg)
-			_ = l.notify(ctx, &OnMessageAppendedHook{Message: assistantMsg})
+			_ = l.notify(ctx, &AfterMessageAppendedHook{Message: assistantMsg})
 
 			if stopReason != StopReasonToolUse {
 				_ = l.notify(ctx, &AfterStreamHook{Messages: l.history})
@@ -191,7 +191,7 @@ func (l *streamLoop) run(ctx context.Context) iter.Seq2[StreamEvent, error] {
 
 			toolMsg := Message{Role: RoleUser, Content: results}
 			l.history = append(l.history, toolMsg)
-			_ = l.notify(ctx, &OnMessageAppendedHook{Message: toolMsg})
+			_ = l.notify(ctx, &AfterMessageAppendedHook{Message: toolMsg})
 		}
 	}
 }
@@ -210,8 +210,14 @@ func (l *streamLoop) consumeStream(ctx context.Context, yield func(StreamEvent, 
 			return nil, "", false
 		}
 
-		// OnStreamEvent
-		_ = l.notify(ctx, &OnStreamEventHook{Event: event})
+		// BeforeStreamEvent (gate) — abort stops consuming
+		if err := l.notify(ctx, &BeforeStreamEventHook{Event: event}); err != nil {
+			if errors.Is(err, ErrAbort) {
+				return nil, "", false
+			}
+			yield(StreamEvent{}, err)
+			return nil, "", false
+		}
 
 		if !yield(event, nil) {
 			return nil, "", false
@@ -257,8 +263,19 @@ func (l *streamLoop) executeTools(ctx context.Context, blocks []Block) []Block {
 		}
 	}
 
-	// BeforeToolCycle
-	_ = l.notify(ctx, &BeforeToolCycleHook{ToolCalls: toolCalls})
+	// BeforeToolCycle (gate hook) — abort or error skips all tool calls
+	if err := l.notify(ctx, &BeforeToolCycleHook{ToolCalls: toolCalls}); err != nil {
+		errMsg := "error: " + err.Error()
+		out := make([]Block, len(toolCalls))
+		for i, tu := range toolCalls {
+			out[i] = &ToolResultBlock{
+				ToolUseID: tu.ID,
+				Content:   []Block{&TextBlock{Text: errMsg}},
+				IsError:   true,
+			}
+		}
+		return out
+	}
 
 	results := make([]*ToolResultBlock, len(toolCalls))
 	var wg sync.WaitGroup
@@ -272,7 +289,7 @@ func (l *streamLoop) executeTools(ctx context.Context, blocks []Block) []Block {
 	}
 	wg.Wait()
 
-	// AfterToolCycle
+	// AfterToolCycle (observer)
 	_ = l.notify(ctx, &AfterToolCycleHook{Results: results})
 
 	out := make([]Block, len(results))
@@ -284,11 +301,11 @@ func (l *streamLoop) executeTools(ctx context.Context, blocks []Block) []Block {
 
 // runTool executes a single tool call and returns the result block.
 func (l *streamLoop) runTool(ctx context.Context, tu *ToolUseBlock) *ToolResultBlock {
-	// BeforeToolCall — abort skips this tool
-	if err := l.notify(ctx, &BeforeToolCallHook{ToolUse: tu}); errors.Is(err, ErrAbort) {
+	// BeforeToolCall — abort or error skips this tool
+	if err := l.notify(ctx, &BeforeToolCallHook{ToolUse: tu}); err != nil {
 		return &ToolResultBlock{
 			ToolUseID: tu.ID,
-			Content:   []Block{&TextBlock{Text: "error: tool call aborted by hook"}},
+			Content:   []Block{&TextBlock{Text: "error: " + err.Error()}},
 			IsError:   true,
 		}
 	}

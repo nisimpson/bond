@@ -8,17 +8,17 @@ import (
 	"github.com/nisimpson/bond"
 )
 
-func TestHookRegistry_OnAndNotify(t *testing.T) {
+func TestHookRegistry_OnBeforeAndNotify(t *testing.T) {
 	registry := &bond.HookRegistry{}
 	var called bool
 
-	bond.On[*bond.BeforeStreamHook](registry, func(ctx context.Context, e *bond.BeforeStreamHook) error {
+	bond.OnBefore(registry, bond.BeforeHookFunc[*bond.BeforeStreamHook](func(ctx context.Context, e *bond.BeforeStreamHook) error {
 		called = true
 		if len(e.Messages) != 1 {
 			t.Errorf("expected 1 message, got %d", len(e.Messages))
 		}
 		return nil
-	})
+	}))
 
 	err := registry.Notify(context.Background(), &bond.BeforeStreamHook{
 		Messages: []bond.Message{{Role: bond.RoleUser}},
@@ -31,22 +31,41 @@ func TestHookRegistry_OnAndNotify(t *testing.T) {
 	}
 }
 
+func TestHookRegistry_OnAfterAndNotify(t *testing.T) {
+	registry := &bond.HookRegistry{}
+	var called bool
+
+	bond.OnAfter(registry, bond.AfterHookFunc[*bond.AfterStreamHook](func(ctx context.Context, e *bond.AfterStreamHook) {
+		called = true
+		if len(e.Messages) != 2 {
+			t.Errorf("expected 2 messages, got %d", len(e.Messages))
+		}
+	}))
+
+	err := registry.Notify(context.Background(), &bond.AfterStreamHook{
+		Messages: []bond.Message{{Role: bond.RoleUser}, {Role: bond.RoleAssistant}},
+	})
+	if err != nil {
+		t.Fatalf("Notify: %v (expected nil for after-hook)", err)
+	}
+	if !called {
+		t.Error("after-hook was not called")
+	}
+}
+
 func TestHookRegistry_FIFOOrder(t *testing.T) {
 	registry := &bond.HookRegistry{}
 	var order []int
 
-	bond.On[*bond.AfterStreamHook](registry, func(ctx context.Context, e *bond.AfterStreamHook) error {
+	bond.OnAfter(registry, bond.AfterHookFunc[*bond.AfterStreamHook](func(ctx context.Context, e *bond.AfterStreamHook) {
 		order = append(order, 1)
-		return nil
-	})
-	bond.On[*bond.AfterStreamHook](registry, func(ctx context.Context, e *bond.AfterStreamHook) error {
+	}))
+	bond.OnAfter(registry, bond.AfterHookFunc[*bond.AfterStreamHook](func(ctx context.Context, e *bond.AfterStreamHook) {
 		order = append(order, 2)
-		return nil
-	})
-	bond.On[*bond.AfterStreamHook](registry, func(ctx context.Context, e *bond.AfterStreamHook) error {
+	}))
+	bond.OnAfter(registry, bond.AfterHookFunc[*bond.AfterStreamHook](func(ctx context.Context, e *bond.AfterStreamHook) {
 		order = append(order, 3)
-		return nil
-	})
+	}))
 
 	_ = registry.Notify(context.Background(), &bond.AfterStreamHook{})
 
@@ -55,23 +74,40 @@ func TestHookRegistry_FIFOOrder(t *testing.T) {
 	}
 }
 
-func TestHookRegistry_ErrorJoining(t *testing.T) {
+func TestHookRegistry_BeforeErrorJoining(t *testing.T) {
 	registry := &bond.HookRegistry{}
 
-	bond.On[*bond.BeforeModelInvokeHook](registry, func(ctx context.Context, e *bond.BeforeModelInvokeHook) error {
+	bond.OnBefore(registry, bond.BeforeHookFunc[*bond.BeforeModelInvokeHook](func(ctx context.Context, e *bond.BeforeModelInvokeHook) error {
 		return errors.New("err1")
-	})
-	bond.On[*bond.BeforeModelInvokeHook](registry, func(ctx context.Context, e *bond.BeforeModelInvokeHook) error {
+	}))
+	bond.OnBefore(registry, bond.BeforeHookFunc[*bond.BeforeModelInvokeHook](func(ctx context.Context, e *bond.BeforeModelInvokeHook) error {
 		return errors.New("err2")
-	})
+	}))
 
 	err := registry.Notify(context.Background(), &bond.BeforeModelInvokeHook{})
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	// Both errors should be present.
+	// Verify both errors are present via string content
 	if !errors.Is(err, err) {
 		t.Error("errors not joined properly")
+	}
+}
+
+func TestHookRegistry_AfterNeverReturnsError(t *testing.T) {
+	registry := &bond.HookRegistry{}
+
+	bond.OnAfter(registry, bond.AfterHookFunc[*bond.AfterToolCallHook](func(ctx context.Context, e *bond.AfterToolCallHook) {
+		// Even if this panicked, the error return from Notify would still be nil
+		// because AfterHookFunc.NotifyHookEvent always returns nil.
+	}))
+
+	err := registry.Notify(context.Background(), &bond.AfterToolCallHook{
+		ToolUse: &bond.ToolUseBlock{ID: "1", Name: "test"},
+		Result:  &bond.ToolResultBlock{ToolUseID: "1"},
+	})
+	if err != nil {
+		t.Errorf("expected nil from after-hook notify, got %v", err)
 	}
 }
 
@@ -88,10 +124,10 @@ func TestHookRegistry_WrongType(t *testing.T) {
 	registry := &bond.HookRegistry{}
 	var called bool
 
-	bond.On[*bond.BeforeStreamHook](registry, func(ctx context.Context, e *bond.BeforeStreamHook) error {
+	bond.OnBefore(registry, bond.BeforeHookFunc[*bond.BeforeStreamHook](func(ctx context.Context, e *bond.BeforeStreamHook) error {
 		called = true
 		return nil
-	})
+	}))
 
 	// Notify with a different event type — should not call the hook.
 	_ = registry.Notify(context.Background(), &bond.AfterStreamHook{})
@@ -100,8 +136,8 @@ func TestHookRegistry_WrongType(t *testing.T) {
 	}
 }
 
-func TestHookFunc_TypeMismatch(t *testing.T) {
-	fn := bond.HookFunc[*bond.BeforeStreamHook](func(ctx context.Context, e *bond.BeforeStreamHook) error {
+func TestBeforeHookFunc_TypeMismatch(t *testing.T) {
+	fn := bond.BeforeHookFunc[*bond.BeforeStreamHook](func(ctx context.Context, e *bond.BeforeStreamHook) error {
 		return errors.New("should not reach")
 	})
 
@@ -109,5 +145,21 @@ func TestHookFunc_TypeMismatch(t *testing.T) {
 	err := fn.NotifyHookEvent(context.Background(), &bond.AfterStreamHook{})
 	if err != nil {
 		t.Errorf("expected nil for type mismatch, got %v", err)
+	}
+}
+
+func TestAfterHookFunc_TypeMismatch(t *testing.T) {
+	var called bool
+	fn := bond.AfterHookFunc[*bond.AfterStreamHook](func(ctx context.Context, e *bond.AfterStreamHook) {
+		called = true
+	})
+
+	// Call with wrong type — should not be called.
+	err := fn.NotifyHookEvent(context.Background(), &bond.BeforeStreamHook{})
+	if err != nil {
+		t.Errorf("expected nil for type mismatch, got %v", err)
+	}
+	if called {
+		t.Error("after-hook should not be called for wrong event type")
 	}
 }

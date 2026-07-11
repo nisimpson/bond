@@ -96,3 +96,45 @@ func NewFuncTool[In, Out any](fn func(context.Context, In) (Out, error), options
 
 	return &FuncTool{options: options, handler: handler}, nil
 }
+
+// ToolConfirmationProvider decides whether a tool call should proceed.
+// Implementations may prompt a user, check a policy, or consult an external
+// service. The provider receives the full [ToolUseBlock] (tool name and input)
+// and returns whether to allow or deny execution.
+type ToolConfirmationProvider interface {
+	// ConfirmToolUse is called before each tool invocation. Return true to
+	// allow the call, or false to deny it. A denied call aborts with
+	// [ErrAbort] and surfaces an error result to the model.
+	ConfirmToolUse(ctx context.Context, toolUse *ToolUseBlock) (bool, error)
+}
+
+// ToolConfirmationFunc adapts a plain function into a [ToolConfirmationProvider].
+type ToolConfirmationFunc func(ctx context.Context, toolUse *ToolUseBlock) (bool, error)
+
+// ConfirmToolUse implements [ToolConfirmationProvider].
+func (f ToolConfirmationFunc) ConfirmToolUse(ctx context.Context, toolUse *ToolUseBlock) (bool, error) {
+	return f(ctx, toolUse)
+}
+
+// NewToolConfirmationPlugin returns a [Plugin] that intercepts [BeforeToolCallHook]
+// and invokes the given provider before each tool execution. If the provider
+// denies the call, the hook returns [ErrAbort] which causes the agent loop to
+// skip the tool and return an error result to the model.
+//
+// The provider is responsible for deciding which tools require confirmation.
+// For example, it may allow all read-only tools unconditionally and only prompt
+// for write operations.
+func NewToolConfirmationPlugin(provider ToolConfirmationProvider) Plugin {
+	return NewHooksPlugin("tool_confirmation", func(registry *HookRegistry) {
+		OnBefore(registry, BeforeHookFunc[*BeforeToolCallHook](func(ctx context.Context, event *BeforeToolCallHook) error {
+			allowed, err := provider.ConfirmToolUse(ctx, event.ToolUse)
+			if err != nil {
+				return fmt.Errorf("tool confirmation failed: %w", err)
+			}
+			if !allowed {
+				return fmt.Errorf("tool call %q denied by confirmation provider: %w", event.ToolUse.Name, ErrAbort)
+			}
+			return nil
+		}))
+	})
+}
