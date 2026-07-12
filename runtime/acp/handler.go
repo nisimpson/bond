@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/agent/agentacp"
 )
 
 // Options configures the ACP handler.
@@ -19,7 +20,7 @@ type Options struct {
 	// AgentOptions configures the bond agent loop (tools, plugins, max turns).
 	AgentOptions bond.AgentOptions
 	// Transport is the reader/writer pair. Defaults to stdin/stdout.
-	Transport *Transport
+	Transport ReadWriter
 	// Commands is the list of slash commands to advertise to the client.
 	Commands []Command
 }
@@ -29,7 +30,7 @@ type Options struct {
 type Handler struct {
 	agent            bond.Agent
 	opts             Options
-	transport        *Transport
+	transport        ReadWriter
 	initialized      bool
 	session          *Session
 	mu               sync.Mutex
@@ -83,10 +84,10 @@ func NewHandler(agent bond.Agent, opts Options) *Handler {
 	)
 
 	h.methods = map[string]methodHandler{
-		"initialize":     h.handleInitialize,
-		"session/new":    h.handleSessionNew,
-		"session/prompt": h.handleSessionPrompt,
-		"session/cancel": h.handleSessionCancel,
+		agentacp.MethodInitialize:    h.handleInitialize,
+		agentacp.MethodSessionNew:    h.handleSessionNew,
+		agentacp.MethodSessionPrompt: h.handleSessionPrompt,
+		agentacp.MethodSessionCancel: h.handleSessionCancel,
 	}
 
 	return h
@@ -147,9 +148,9 @@ func (h *Handler) Serve(ctx context.Context) error {
 
 // dispatch routes a parsed message to the appropriate handler method.
 func (h *Handler) dispatch(ctx context.Context, msg *Message) error {
-	// Pre-initialization guard: reject all methods except "initialize"
+	// Pre-initialization guard: reject all methods except agentacp.MethodInitialize
 	// if the handler has not been initialized yet.
-	if msg.Method != "initialize" {
+	if msg.Method != agentacp.MethodInitialize {
 		h.mu.Lock()
 		initialized := h.initialized
 		h.mu.Unlock()
@@ -157,7 +158,7 @@ func (h *Handler) dispatch(ctx context.Context, msg *Message) error {
 		if !initialized {
 			// If it's a request (has an id), respond with error -32002.
 			if msg.ID != nil {
-				return h.respondError(msg.ID, CodeServerNotInit, "server not initialized")
+				return h.respondError(msg.ID, agentacp.CodeServerNotInit, "server not initialized")
 			}
 			// If it's a notification, silently ignore it.
 			return nil
@@ -168,7 +169,7 @@ func (h *Handler) dispatch(ctx context.Context, msg *Message) error {
 	if !exists {
 		// Unknown method — only respond if this is a request (has an id).
 		if msg.ID != nil {
-			return h.respondError(msg.ID, CodeMethodNotFound, "method not found: "+msg.Method)
+			return h.respondError(msg.ID, agentacp.CodeMethodNotFound, "method not found: "+msg.Method)
 		}
 		// Notifications for unknown methods are silently ignored.
 		return nil
@@ -187,26 +188,34 @@ func (h *Handler) respondError(id *json.RawMessage, code int, message string) er
 			Message: message,
 		},
 	}
-	return h.transport.WriteMessage(resp)
+	data, err := json.Marshal(resp)
+	if err != nil {
+		return err
+	}
+	return h.transport.WriteMessage(data)
 }
 
 // respondResult sends a JSON-RPC success response.
 func (h *Handler) respondResult(id *json.RawMessage, result any) error {
-	data, err := json.Marshal(result)
+	resultData, err := json.Marshal(result)
 	if err != nil {
-		return h.respondError(id, CodeInvalidParams, "failed to marshal result")
+		return h.respondError(id, agentacp.CodeInvalidParams, "failed to marshal result")
 	}
 	resp := Message{
 		JSONRPC: "2.0",
 		ID:      id,
-		Result:  data,
+		Result:  resultData,
 	}
-	return h.transport.WriteMessage(resp)
+	data, err := json.Marshal(resp)
+	if err != nil {
+		return err
+	}
+	return h.transport.WriteMessage(data)
 }
 
 // respondParseError sends a -32700 parse error response.
 func (h *Handler) respondParseError(id *json.RawMessage) error {
-	return h.respondError(id, CodeParseError, "parse error")
+	return h.respondError(id, agentacp.CodeParseError, "parse error")
 }
 
 // --- Stub method handlers (to be implemented in later tasks) ---
@@ -246,25 +255,25 @@ func (h *Handler) handleInitialize(ctx context.Context, msg *Message) error {
 	var params initializeParams
 	if msg.Params != nil {
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return h.respondError(msg.ID, CodeInvalidParams, "invalid params: "+err.Error())
+			return h.respondError(msg.ID, agentacp.CodeInvalidParams, "invalid params: "+err.Error())
 		}
 	}
 
 	// Validate protocolVersion is present.
 	if params.ProtocolVersion == nil {
-		return h.respondError(msg.ID, CodeInvalidParams, "protocolVersion field is required")
+		return h.respondError(msg.ID, agentacp.CodeInvalidParams, "protocolVersion field is required")
 	}
 
 	// Validate protocolVersion value.
 	if *params.ProtocolVersion != 1 {
-		return h.respondError(msg.ID, CodeInvalidParams, "unsupported protocol version")
+		return h.respondError(msg.ID, agentacp.CodeInvalidParams, "unsupported protocol version")
 	}
 
 	// Check if already initialized (thread-safe).
 	h.mu.Lock()
 	if h.initialized {
 		h.mu.Unlock()
-		return h.respondError(msg.ID, CodeInvalidRequest, "already initialized")
+		return h.respondError(msg.ID, agentacp.CodeInvalidRequest, "already initialized")
 	}
 	h.initialized = true
 	h.mu.Unlock()
@@ -313,7 +322,7 @@ func (h *Handler) handleSessionNew(ctx context.Context, msg *Message) error {
 	var params sessionNewParams
 	if msg.Params != nil {
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return h.respondError(msg.ID, CodeInvalidParams, "invalid params: "+err.Error())
+			return h.respondError(msg.ID, agentacp.CodeInvalidParams, "invalid params: "+err.Error())
 		}
 	}
 
@@ -336,11 +345,11 @@ func (h *Handler) handleSessionNew(ctx context.Context, msg *Message) error {
 	// Send session/update notification with available_commands.
 	notification := Message{
 		JSONRPC: "2.0",
-		Method:  "session/update",
+		Method:  agentacp.MethodSessionUpdate,
 	}
 	notifParams := sessionUpdateNotification{
 		SessionID: sessionID,
-		Type:      "available_commands",
+		Type:      agentacp.UpdateTypeAvailableCommands,
 		Commands:  h.opts.Commands,
 	}
 	// If commands is nil, use empty slice for JSON serialization.
@@ -353,7 +362,11 @@ func (h *Handler) handleSessionNew(ctx context.Context, msg *Message) error {
 	}
 	notification.Params = paramsData
 
-	return h.transport.WriteMessage(notification)
+	notifData, err := json.Marshal(notification)
+	if err != nil {
+		return err
+	}
+	return h.transport.WriteMessage(notifData)
 }
 
 // sessionPromptParams holds the parsed params for the session/prompt request.
@@ -392,14 +405,14 @@ func (h *Handler) handleSessionPrompt(ctx context.Context, msg *Message) error {
 	}
 
 	if session == nil {
-		return h.respondError(msg.ID, CodeNoActiveSession, "no active session")
+		return h.respondError(msg.ID, agentacp.CodeNoActiveSession, "no active session")
 	}
 
 	// Parse params to get user message.
 	var params sessionPromptParams
 	if msg.Params != nil {
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return h.respondError(msg.ID, CodeInvalidParams, "invalid params: "+err.Error())
+			return h.respondError(msg.ID, agentacp.CodeInvalidParams, "invalid params: "+err.Error())
 		}
 	}
 
@@ -455,7 +468,7 @@ func (h *Handler) handleSessionPrompt(ctx context.Context, msg *Message) error {
 					_ = h.respondResult(msg.ID, sessionPromptResult{StopReason: "cancelled"})
 					return
 				}
-				_ = h.respondError(msg.ID, CodeInternalError, "agent stream error: "+err.Error())
+				_ = h.respondError(msg.ID, agentacp.CodeInternalError, "agent stream error: "+err.Error())
 				return
 			}
 
@@ -476,10 +489,14 @@ func (h *Handler) handleSessionPrompt(ctx context.Context, msg *Message) error {
 				}
 				notification := Message{
 					JSONRPC: "2.0",
-					Method:  "session/update",
+					Method:  agentacp.MethodSessionUpdate,
 					Params:  paramsData,
 				}
-				if werr := h.transport.WriteMessage(notification); werr != nil {
+				nData, merr2 := json.Marshal(notification)
+				if merr2 != nil {
+					return
+				}
+				if werr := h.transport.WriteMessage(nData); werr != nil {
 					return
 				}
 

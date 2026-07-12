@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/agent/agentacp"
 )
 
 // toolCallNotification is the session/update notification for a tool_call event (pending).
@@ -30,7 +31,7 @@ type toolCallUpdateNotification struct {
 // toolNotifier is a bond.Plugin that sends tool call lifecycle notifications
 // to the ACP client via session/update messages.
 type toolNotifier struct {
-	transport *Transport
+	transport ReadWriter
 	session   func() *Session // accessor to get current session
 }
 
@@ -51,7 +52,7 @@ func (tn *toolNotifier) beforeToolCall(ctx context.Context, event *bond.BeforeTo
 
 	notif := toolCallUpdateNotification{
 		SessionID:  session.ID,
-		Type:       "tool_call_update",
+		Type:       agentacp.UpdateTypeToolCallUpdate,
 		ToolCallID: event.ToolUse.ID,
 		Status:     "in_progress",
 	}
@@ -68,7 +69,7 @@ func (tn *toolNotifier) afterToolCall(ctx context.Context, event *bond.AfterTool
 
 	notif := toolCallUpdateNotification{
 		SessionID:  session.ID,
-		Type:       "tool_call_update",
+		Type:       agentacp.UpdateTypeToolCallUpdate,
 		ToolCallID: event.ToolUse.ID,
 	}
 
@@ -92,7 +93,7 @@ func (tn *toolNotifier) sendToolCallPending(toolUse *bond.ToolUseBlock) error {
 
 	notif := toolCallNotification{
 		SessionID:  session.ID,
-		Type:       "tool_call",
+		Type:       agentacp.UpdateTypeToolCall,
 		ToolCallID: toolUse.ID,
 		ToolName:   toolUse.Name,
 		Status:     "pending",
@@ -110,11 +111,15 @@ func (tn *toolNotifier) sendNotification(params any) error {
 
 	msg := Message{
 		JSONRPC: "2.0",
-		Method:  "session/update",
+		Method:  agentacp.MethodSessionUpdate,
 		Params:  data,
 	}
 
-	return tn.transport.WriteMessage(msg)
+	msgData, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return tn.transport.WriteMessage(msgData)
 }
 
 // Verify interface compliance.

@@ -7,12 +7,13 @@ import (
 	"sync"
 
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/agent/agentacp"
 )
 
 // permissionPlugin implements bond.Plugin to intercept tool calls
 // and request client approval via the ACP protocol.
 type permissionPlugin struct {
-	transport *Transport
+	transport ReadWriter
 	session   func() *Session
 	pending   map[string]chan permissionResponse // keyed by request ID
 	mu        sync.Mutex
@@ -75,12 +76,16 @@ func (p *permissionPlugin) beforeToolCall(ctx context.Context, event *bond.Befor
 	idRaw := json.RawMessage(fmt.Sprintf("%q", reqID))
 	msg := Message{
 		JSONRPC: "2.0",
-		Method:  "session/request_permission",
+		Method:  agentacp.MethodRequestPermission,
 		ID:      &idRaw,
 		Params:  paramsData,
 	}
 
-	if err := p.transport.WriteMessage(msg); err != nil {
+	msgData, err2 := json.Marshal(msg)
+	if err2 != nil {
+		return bond.ErrAbort
+	}
+	if err := p.transport.WriteMessage(msgData); err != nil {
 		return bond.ErrAbort
 	}
 
