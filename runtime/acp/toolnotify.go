@@ -39,8 +39,8 @@ func (tn *toolNotifier) Name() string       { return "acp_tool_notifier" }
 func (tn *toolNotifier) Tools() []bond.Tool { return nil }
 
 func (tn *toolNotifier) Init(r *bond.HookRegistry) {
-	bond.OnBefore(r, bond.BeforeHookFunc[*bond.BeforeToolCallHook](tn.beforeToolCall))
-	bond.OnAfter(r, bond.AfterHookFunc[*bond.AfterToolCallHook](tn.afterToolCall))
+	bond.OnBefore(r, tn.beforeToolCall)
+	bond.OnAfter(r, tn.afterToolCall)
 }
 
 // beforeToolCall sends the "in_progress" notification when tool execution begins.
