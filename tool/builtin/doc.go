@@ -1,4 +1,4 @@
-// Package toolbox provides a suite of reusable tools for Bond agents that cover
+// Package builtin provides a suite of reusable tools for Bond agents that cover
 // common system interactions: shell command execution, HTTP fetching, file I/O,
 // and environment variable access.
 //
@@ -29,8 +29,8 @@
 //
 // Create a toolbox plugin with [New] and register it with a Bond agent:
 //
-//	plugin, err := toolbox.New(toolbox.Options{
-//	    Sandbox: &toolbox.SandboxConfig{
+//	plugin, err := builtin.New(builtin.Options{
+//	    Sandbox: &builtin.SandboxConfig{
 //	        BaseDirectory:    "/app/workspace",
 //	        CommandAllowlist: []string{"go", "make", "git"},
 //	    },
@@ -45,9 +45,9 @@
 //
 // Use [Options].Include to select a subset of tools:
 //
-//	plugin, _ := toolbox.New(toolbox.Options{
-//	    Sandbox: &toolbox.SandboxConfig{BaseDirectory: "/app"},
-//	    Include: []string{toolbox.ToolFileRead, toolbox.ToolFileWrite},
+//	plugin, _ := builtin.New(builtin.Options{
+//	    Sandbox: &builtin.SandboxConfig{BaseDirectory: "/app"},
+//	    Include: []string{builtin.ToolFileRead, builtin.ToolFileWrite},
 //	})
 //
 // When Include is nil, all five tools are registered.
@@ -86,4 +86,4 @@
 //   - [ErrTimeout] — Operation exceeded its time limit.
 //   - [ErrSizeExceeded] — File exceeds the configured maximum size.
 //   - [ErrConnection] — Network connectivity failure (HTTP tool).
-package toolbox
+package builtin

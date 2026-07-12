@@ -140,9 +140,9 @@ bond/runtime/                Generic protocol handlers (A2A, HTTP, MCP) for cust
 bond/runtime/acp/            ACP handler for code editors (Zed, JetBrains, VS Code)
 bond/runtime/agentcore/      AWS Bedrock AgentCore defaults (ports, paths, session headers)
 bond/tool/                   Tool infrastructure (schema, MCP adapter, structured output)
+bond/tool/builtin/           Built-in tools: shell, file I/O, HTTP, environment
+bond/tool/registry/          Tool discovery gateway plugin
 bond/extra/delegation/       A2A tool delegation (client + server)
-bond/extra/toolbox/          Built-in tools: shell, file I/O, environment
-bond/extra/toolregistry/     Tool discovery gateway plugin
 bond/bondtest/               Test utilities (deterministic agent, event helpers)
 ```
 
@@ -345,14 +345,14 @@ bond.Stream(ctx, agent, msgs, bond.AgentOptions{Tools: tools})
 When you have more gadgets than an agent can carry, use the registry:
 
 ```go
-registry := toolregistry.New(toolregistry.Options{
+reg := registry.New(registry.Options{
     Tools: fiftyGadgets,
 })
 
 // Agent sees 3 tools: list_tools, describe_tool, use_tool
 // It discovers what it needs on demand.
 bond.Stream(ctx, agent, msgs, bond.AgentOptions{
-    Plugins: []bond.Plugin{registry},
+    Plugins: []bond.Plugin{reg},
 })
 ```
 

@@ -1,9 +1,9 @@
-// Package toolregistry provides a plugin that exposes a large collection of
+// Package registry provides a plugin that exposes a large collection of
 // tools through a stable 3-tool gateway: list_tools, describe_tool, use_tool.
 //
 // This avoids flooding the model's context with dozens of tool definitions.
 // Instead, the model discovers and invokes tools on demand.
-package toolregistry
+package registry
 
 import (
 	"context"
@@ -51,8 +51,8 @@ type Options struct {
 	//
 	// Example:
 	//
-	//	FilterHelp: func() []toolregistry.FilterExample {
-	//	    return []toolregistry.FilterExample{
+	//	FilterHelp: func() []registry.FilterExample {
+	//	    return []registry.FilterExample{
 	//	        {Filter: "category:database", Description: "tools in the database category"},
 	//	        {Filter: "tag:read-only", Description: "tools tagged as read-only"},
 	//	        {Filter: "sql", Description: "tools matching 'sql' in name or description"},
@@ -66,7 +66,7 @@ type Options struct {
 //
 // Example:
 //
-//	registry := toolregistry.New(toolregistry.Options{
+//	registry := registry.New(registry.Options{
 //	    Tools: allMyTools,
 //	})
 //
@@ -100,7 +100,7 @@ func New(opts Options) *Plugin {
 	}
 }
 
-func (r *Plugin) Name() string                     { return "toolregistry" }
+func (r *Plugin) Name() string                     { return "registry" }
 func (r *Plugin) Init(registry *bond.HookRegistry) {}
 
 // Tools returns the three meta-tools that the agent sees.

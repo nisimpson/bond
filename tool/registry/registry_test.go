@@ -1,4 +1,4 @@
-package toolregistry_test
+package registry_test
 
 import (
 	"context"
@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	"github.com/nisimpson/bond"
-	"github.com/nisimpson/bond/extra/toolregistry"
+	"github.com/nisimpson/bond/tool/registry"
 )
 
 func TestRegistry_ThreeTools(t *testing.T) {
-	reg := toolregistry.New(toolregistry.Options{
+	reg := registry.New(registry.Options{
 		Tools: []bond.Tool{&fakeTool{name: "a"}, &fakeTool{name: "b"}},
 	})
 
@@ -31,7 +31,7 @@ func TestRegistry_ThreeTools(t *testing.T) {
 }
 
 func TestRegistry_ListTools(t *testing.T) {
-	reg := toolregistry.New(toolregistry.Options{
+	reg := registry.New(registry.Options{
 		Tools: []bond.Tool{
 			&fakeTool{name: "search", desc: "Search the web"},
 			&fakeTool{name: "calc", desc: "Calculator"},
@@ -66,7 +66,7 @@ func TestRegistry_ListTools(t *testing.T) {
 }
 
 func TestRegistry_DescribeTool(t *testing.T) {
-	reg := toolregistry.New(toolregistry.Options{
+	reg := registry.New(registry.Options{
 		Tools: []bond.Tool{&fakeTool{name: "search", desc: "Search the web"}},
 	})
 
@@ -85,7 +85,7 @@ func TestRegistry_DescribeTool(t *testing.T) {
 }
 
 func TestRegistry_DescribeTool_NotFound(t *testing.T) {
-	reg := toolregistry.New(toolregistry.Options{Tools: nil})
+	reg := registry.New(registry.Options{Tools: nil})
 	describeTool := reg.Tools()[1]
 
 	blocks, err := describeTool.Run(context.Background(), json.RawMessage(`{"name":"nope"}`))
@@ -100,7 +100,7 @@ func TestRegistry_DescribeTool_NotFound(t *testing.T) {
 
 func TestRegistry_UseTool(t *testing.T) {
 	called := false
-	reg := toolregistry.New(toolregistry.Options{
+	reg := registry.New(registry.Options{
 		Tools: []bond.Tool{&fakeTool{
 			name: "greet",
 			runFn: func(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
@@ -126,7 +126,7 @@ func TestRegistry_UseTool(t *testing.T) {
 }
 
 func TestRegistry_UseTool_NotFound(t *testing.T) {
-	reg := toolregistry.New(toolregistry.Options{Tools: nil})
+	reg := registry.New(registry.Options{Tools: nil})
 	useTool := reg.Tools()[2]
 
 	blocks, err := useTool.Run(context.Background(), json.RawMessage(`{"name":"nope","arguments":{}}`))
@@ -140,10 +140,10 @@ func TestRegistry_UseTool_NotFound(t *testing.T) {
 }
 
 func TestRegistry_FilterHelp(t *testing.T) {
-	reg := toolregistry.New(toolregistry.Options{
+	reg := registry.New(registry.Options{
 		Tools: []bond.Tool{&fakeTool{name: "a"}},
-		FilterHelp: func() []toolregistry.FilterExample {
-			return []toolregistry.FilterExample{
+		FilterHelp: func() []registry.FilterExample {
+			return []registry.FilterExample{
 				{Filter: "cat:db", Description: "database tools"},
 			}
 		},
