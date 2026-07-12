@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"github.com/nisimpson/bond"
-	"github.com/nisimpson/bond/agent/acpproxy"
-	"github.com/nisimpson/bond/agent/acpproxy/acpio"
+	"github.com/nisimpson/bond/provider/acpproxy"
+	"github.com/nisimpson/bond/provider/acpproxy/acpio"
 )
 
 func main() {

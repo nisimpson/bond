@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nisimpson/bond/agent/acpproxy/acpio"
+	"github.com/nisimpson/bond/provider/acpproxy/acpio"
 
 	bond "github.com/nisimpson/bond"
 )
