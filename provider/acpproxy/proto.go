@@ -1,4 +1,4 @@
-// Package agentacp provides ACP (Agent Client Protocol) building blocks and a
+// Package acpproxy provides ACP (Agent Client Protocol) building blocks and a
 // proxy client for connecting to external ACP-compatible agents.
 //
 // This package serves two purposes:
@@ -15,8 +15,8 @@
 //
 // # Quick Start
 //
-//	client := agentacp.NewClientFromCommand("kiro", nil,
-//	    agentacp.ClientOptions{WorkingDir: "/my/project"},
+//	client := acpproxy.NewClientFromCommand("kiro", nil,
+//	    acpproxy.ClientOptions{WorkingDir: "/my/project"},
 //	    acpio.StdioOptions{},
 //	)
 //	if err := client.Start(ctx); err != nil { ... }
@@ -24,7 +24,7 @@
 //
 //	agent := client.Agent()
 //	// Use agent with bond.Stream, bond.Invoke, etc.
-package agentacp
+package acpproxy
 
 import "encoding/json"
 

@@ -57,8 +57,8 @@ type StdioOptions struct {
 
 // StdioProcess manages a subprocess and provides a ReadWriter connected to
 // its stdin (write) and stdout (read). It implements ReadMessage/WriteMessage
-// directly (satisfying agentacp.ReadWriter) and supports Reset for reconnection
-// (satisfying agentacp.Resettable).
+// directly (satisfying acpproxy.ReadWriter) and supports Reset for reconnection
+// (satisfying acpproxy.Resettable).
 type StdioProcess struct {
 	cmd     string
 	args    []string

@@ -1,4 +1,4 @@
-package agentacp_test
+package acpproxy_test
 
 import (
 	"encoding/json"
@@ -8,8 +8,8 @@ import (
 	"testing"
 	"testing/quick"
 
-	"github.com/nisimpson/bond/agent/agentacp"
-	"github.com/nisimpson/bond/agent/agentacp/acpio"
+	"github.com/nisimpson/bond/provider/acpproxy"
+	"github.com/nisimpson/bond/provider/acpproxy/acpio"
 )
 
 // TestProperty_JSONRPCMessageRoundTrip verifies that for any valid JSON-RPC 2.0
@@ -20,7 +20,7 @@ import (
 // Feature: acp-proxy, Property 1: JSON-RPC Message Round-Trip
 // **Validates: Requirements 12.5**
 func TestProperty_JSONRPCMessageRoundTrip(t *testing.T) {
-	f := func(msg agentacp.Message) bool {
+	f := func(msg acpproxy.Message) bool {
 		pr, pw := io.Pipe()
 		transport := acpio.NewTransport(pr, pw)
 
@@ -50,7 +50,7 @@ func TestProperty_JSONRPCMessageRoundTrip(t *testing.T) {
 		}
 
 		// Deserialize back into a Message.
-		var got agentacp.Message
+		var got acpproxy.Message
 		if err := json.Unmarshal(raw, &got); err != nil {
 			t.Logf("Unmarshal error: %v", err)
 			return false
@@ -99,8 +99,8 @@ func TestProperty_JSONRPCMessageRoundTrip(t *testing.T) {
 // --- Generators ---
 
 // generateMessage produces a valid JSON-RPC 2.0 message (request, response, or notification).
-func generateMessage(rnd *rand.Rand) agentacp.Message {
-	msg := agentacp.Message{JSONRPC: "2.0"}
+func generateMessage(rnd *rand.Rand) acpproxy.Message {
+	msg := acpproxy.Message{JSONRPC: "2.0"}
 
 	// Randomly choose message type: 0=request, 1=response, 2=notification
 	switch rnd.Intn(3) {
@@ -181,14 +181,14 @@ func generateResult(rnd *rand.Rand) json.RawMessage {
 	return raw
 }
 
-// generateError produces a random agentacp.ErrorObject.
-func generateError(rnd *rand.Rand) *agentacp.ErrorObject {
+// generateError produces a random acpproxy.ErrorObject.
+func generateError(rnd *rand.Rand) *acpproxy.ErrorObject {
 	codes := []int{
-		agentacp.CodeParseError, agentacp.CodeInvalidRequest, agentacp.CodeMethodNotFound,
-		agentacp.CodeInvalidParams, agentacp.CodeInternalError, agentacp.CodeServerNotInit,
-		agentacp.CodeNoActiveSession,
+		acpproxy.CodeParseError, acpproxy.CodeInvalidRequest, acpproxy.CodeMethodNotFound,
+		acpproxy.CodeInvalidParams, acpproxy.CodeInternalError, acpproxy.CodeServerNotInit,
+		acpproxy.CodeNoActiveSession,
 	}
-	errObj := &agentacp.ErrorObject{
+	errObj := &acpproxy.ErrorObject{
 		Code:    codes[rnd.Intn(len(codes))],
 		Message: generateAlphanumeric(rnd, 5+rnd.Intn(20)),
 	}
@@ -254,8 +254,8 @@ func rawEqual(a, b json.RawMessage) bool {
 	return reflect.DeepEqual(av, bv)
 }
 
-// errObjEqual compares two *agentacp.ErrorObject for equivalence.
-func errObjEqual(a, b *agentacp.ErrorObject) bool {
+// errObjEqual compares two *acpproxy.ErrorObject for equivalence.
+func errObjEqual(a, b *acpproxy.ErrorObject) bool {
 	if a == nil && b == nil {
 		return true
 	}

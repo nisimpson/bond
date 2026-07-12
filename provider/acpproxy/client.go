@@ -1,4 +1,4 @@
-package agentacp
+package acpproxy
 
 import (
 	"context"
@@ -101,7 +101,7 @@ type Client struct {
 	caps      Capabilities
 	started   bool
 	closed    bool
-	proxy     *ProxyAgent
+	proxy     *Agent
 	closeOnce sync.Once
 }
 
@@ -161,13 +161,13 @@ func (c *Client) Start(ctx context.Context) error {
 	})
 	if err != nil {
 		c.dispatcher.Stop()
-		return fmt.Errorf("agentacp: initialize: %w", err)
+		return fmt.Errorf("acpproxy: initialize: %w", err)
 	}
 
 	var initResult initializeResponse
 	if err := json.Unmarshal(initResp.Result, &initResult); err != nil {
 		c.dispatcher.Stop()
-		return fmt.Errorf("agentacp: parse initialize response: %w", err)
+		return fmt.Errorf("acpproxy: parse initialize response: %w", err)
 	}
 
 	c.mu.Lock()
@@ -182,13 +182,13 @@ func (c *Client) Start(ctx context.Context) error {
 	})
 	if err != nil {
 		c.dispatcher.Stop()
-		return fmt.Errorf("agentacp: session/new: %w", err)
+		return fmt.Errorf("acpproxy: session/new: %w", err)
 	}
 
 	var sessionResult sessionNewResponse
 	if err := json.Unmarshal(sessionResp.Result, &sessionResult); err != nil {
 		c.dispatcher.Stop()
-		return fmt.Errorf("agentacp: parse session/new response: %w", err)
+		return fmt.Errorf("acpproxy: parse session/new response: %w", err)
 	}
 
 	c.mu.Lock()
@@ -198,12 +198,12 @@ func (c *Client) Start(ctx context.Context) error {
 	// Step 5: Run priming sequence.
 	if err := c.runPriming(ctx); err != nil {
 		c.dispatcher.Stop()
-		return fmt.Errorf("agentacp: priming: %w", err)
+		return fmt.Errorf("acpproxy: priming: %w", err)
 	}
 
 	// Step 6: Create proxy agent.
 	c.mu.Lock()
-	c.proxy = &ProxyAgent{client: c}
+	c.proxy = &Agent{client: c}
 	c.started = true
 	c.mu.Unlock()
 
@@ -340,7 +340,7 @@ func (c *Client) Reconnect(ctx context.Context) error {
 	// Reset the transport (e.g., spawns a new subprocess for StdioProcess,
 	// reconnects for a TCP transport, etc.).
 	if err := resettable.Reset(); err != nil {
-		return fmt.Errorf("agentacp: reset transport: %w", err)
+		return fmt.Errorf("acpproxy: reset transport: %w", err)
 	}
 
 	// After Reset, the StdioProcess IS the ReadWriter (it internally recreates
@@ -361,13 +361,13 @@ func (c *Client) Reconnect(ctx context.Context) error {
 	})
 	if err != nil {
 		c.dispatcher.Stop()
-		return fmt.Errorf("agentacp: reconnect initialize: %w", err)
+		return fmt.Errorf("acpproxy: reconnect initialize: %w", err)
 	}
 
 	var initResult initializeResponse
 	if err := json.Unmarshal(initResp.Result, &initResult); err != nil {
 		c.dispatcher.Stop()
-		return fmt.Errorf("agentacp: reconnect parse initialize response: %w", err)
+		return fmt.Errorf("acpproxy: reconnect parse initialize response: %w", err)
 	}
 
 	c.mu.Lock()
@@ -382,13 +382,13 @@ func (c *Client) Reconnect(ctx context.Context) error {
 	})
 	if err != nil {
 		c.dispatcher.Stop()
-		return fmt.Errorf("agentacp: reconnect session/new: %w", err)
+		return fmt.Errorf("acpproxy: reconnect session/new: %w", err)
 	}
 
 	var sessionResult sessionNewResponse
 	if err := json.Unmarshal(sessionResp.Result, &sessionResult); err != nil {
 		c.dispatcher.Stop()
-		return fmt.Errorf("agentacp: reconnect parse session/new response: %w", err)
+		return fmt.Errorf("acpproxy: reconnect parse session/new response: %w", err)
 	}
 
 	c.mu.Lock()
@@ -398,12 +398,12 @@ func (c *Client) Reconnect(ctx context.Context) error {
 	// Replay the priming sequence (system prompt + initial context).
 	if err := c.runPriming(ctx); err != nil {
 		c.dispatcher.Stop()
-		return fmt.Errorf("agentacp: reconnect priming: %w", err)
+		return fmt.Errorf("acpproxy: reconnect priming: %w", err)
 	}
 
 	// Re-create the ProxyAgent with the reconnected client.
 	c.mu.Lock()
-	c.proxy = &ProxyAgent{client: c}
+	c.proxy = &Agent{client: c}
 	c.mu.Unlock()
 
 	return nil

@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nisimpson/bond"
-	"github.com/nisimpson/bond/agent/agentacp"
+	"github.com/nisimpson/bond/provider/acpproxy"
 )
 
 // Options configures the ACP handler.
@@ -84,10 +84,10 @@ func NewHandler(agent bond.Agent, opts Options) *Handler {
 	)
 
 	h.methods = map[string]methodHandler{
-		agentacp.MethodInitialize:    h.handleInitialize,
-		agentacp.MethodSessionNew:    h.handleSessionNew,
-		agentacp.MethodSessionPrompt: h.handleSessionPrompt,
-		agentacp.MethodSessionCancel: h.handleSessionCancel,
+		acpproxy.MethodInitialize:    h.handleInitialize,
+		acpproxy.MethodSessionNew:    h.handleSessionNew,
+		acpproxy.MethodSessionPrompt: h.handleSessionPrompt,
+		acpproxy.MethodSessionCancel: h.handleSessionCancel,
 	}
 
 	return h
@@ -148,9 +148,9 @@ func (h *Handler) Serve(ctx context.Context) error {
 
 // dispatch routes a parsed message to the appropriate handler method.
 func (h *Handler) dispatch(ctx context.Context, msg *Message) error {
-	// Pre-initialization guard: reject all methods except agentacp.MethodInitialize
+	// Pre-initialization guard: reject all methods except acpproxy.MethodInitialize
 	// if the handler has not been initialized yet.
-	if msg.Method != agentacp.MethodInitialize {
+	if msg.Method != acpproxy.MethodInitialize {
 		h.mu.Lock()
 		initialized := h.initialized
 		h.mu.Unlock()
@@ -158,7 +158,7 @@ func (h *Handler) dispatch(ctx context.Context, msg *Message) error {
 		if !initialized {
 			// If it's a request (has an id), respond with error -32002.
 			if msg.ID != nil {
-				return h.respondError(msg.ID, agentacp.CodeServerNotInit, "server not initialized")
+				return h.respondError(msg.ID, acpproxy.CodeServerNotInit, "server not initialized")
 			}
 			// If it's a notification, silently ignore it.
 			return nil
@@ -169,7 +169,7 @@ func (h *Handler) dispatch(ctx context.Context, msg *Message) error {
 	if !exists {
 		// Unknown method — only respond if this is a request (has an id).
 		if msg.ID != nil {
-			return h.respondError(msg.ID, agentacp.CodeMethodNotFound, "method not found: "+msg.Method)
+			return h.respondError(msg.ID, acpproxy.CodeMethodNotFound, "method not found: "+msg.Method)
 		}
 		// Notifications for unknown methods are silently ignored.
 		return nil
@@ -199,7 +199,7 @@ func (h *Handler) respondError(id *json.RawMessage, code int, message string) er
 func (h *Handler) respondResult(id *json.RawMessage, result any) error {
 	resultData, err := json.Marshal(result)
 	if err != nil {
-		return h.respondError(id, agentacp.CodeInvalidParams, "failed to marshal result")
+		return h.respondError(id, acpproxy.CodeInvalidParams, "failed to marshal result")
 	}
 	resp := Message{
 		JSONRPC: "2.0",
@@ -215,7 +215,7 @@ func (h *Handler) respondResult(id *json.RawMessage, result any) error {
 
 // respondParseError sends a -32700 parse error response.
 func (h *Handler) respondParseError(id *json.RawMessage) error {
-	return h.respondError(id, agentacp.CodeParseError, "parse error")
+	return h.respondError(id, acpproxy.CodeParseError, "parse error")
 }
 
 // --- Stub method handlers (to be implemented in later tasks) ---
@@ -255,25 +255,25 @@ func (h *Handler) handleInitialize(ctx context.Context, msg *Message) error {
 	var params initializeParams
 	if msg.Params != nil {
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return h.respondError(msg.ID, agentacp.CodeInvalidParams, "invalid params: "+err.Error())
+			return h.respondError(msg.ID, acpproxy.CodeInvalidParams, "invalid params: "+err.Error())
 		}
 	}
 
 	// Validate protocolVersion is present.
 	if params.ProtocolVersion == nil {
-		return h.respondError(msg.ID, agentacp.CodeInvalidParams, "protocolVersion field is required")
+		return h.respondError(msg.ID, acpproxy.CodeInvalidParams, "protocolVersion field is required")
 	}
 
 	// Validate protocolVersion value.
 	if *params.ProtocolVersion != 1 {
-		return h.respondError(msg.ID, agentacp.CodeInvalidParams, "unsupported protocol version")
+		return h.respondError(msg.ID, acpproxy.CodeInvalidParams, "unsupported protocol version")
 	}
 
 	// Check if already initialized (thread-safe).
 	h.mu.Lock()
 	if h.initialized {
 		h.mu.Unlock()
-		return h.respondError(msg.ID, agentacp.CodeInvalidRequest, "already initialized")
+		return h.respondError(msg.ID, acpproxy.CodeInvalidRequest, "already initialized")
 	}
 	h.initialized = true
 	h.mu.Unlock()
@@ -322,7 +322,7 @@ func (h *Handler) handleSessionNew(ctx context.Context, msg *Message) error {
 	var params sessionNewParams
 	if msg.Params != nil {
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return h.respondError(msg.ID, agentacp.CodeInvalidParams, "invalid params: "+err.Error())
+			return h.respondError(msg.ID, acpproxy.CodeInvalidParams, "invalid params: "+err.Error())
 		}
 	}
 
@@ -345,11 +345,11 @@ func (h *Handler) handleSessionNew(ctx context.Context, msg *Message) error {
 	// Send session/update notification with available_commands.
 	notification := Message{
 		JSONRPC: "2.0",
-		Method:  agentacp.MethodSessionUpdate,
+		Method:  acpproxy.MethodSessionUpdate,
 	}
 	notifParams := sessionUpdateNotification{
 		SessionID: sessionID,
-		Type:      agentacp.UpdateTypeAvailableCommands,
+		Type:      acpproxy.UpdateTypeAvailableCommands,
 		Commands:  h.opts.Commands,
 	}
 	// If commands is nil, use empty slice for JSON serialization.
@@ -405,14 +405,14 @@ func (h *Handler) handleSessionPrompt(ctx context.Context, msg *Message) error {
 	}
 
 	if session == nil {
-		return h.respondError(msg.ID, agentacp.CodeNoActiveSession, "no active session")
+		return h.respondError(msg.ID, acpproxy.CodeNoActiveSession, "no active session")
 	}
 
 	// Parse params to get user message.
 	var params sessionPromptParams
 	if msg.Params != nil {
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return h.respondError(msg.ID, agentacp.CodeInvalidParams, "invalid params: "+err.Error())
+			return h.respondError(msg.ID, acpproxy.CodeInvalidParams, "invalid params: "+err.Error())
 		}
 	}
 
@@ -468,7 +468,7 @@ func (h *Handler) handleSessionPrompt(ctx context.Context, msg *Message) error {
 					_ = h.respondResult(msg.ID, sessionPromptResult{StopReason: "cancelled"})
 					return
 				}
-				_ = h.respondError(msg.ID, agentacp.CodeInternalError, "agent stream error: "+err.Error())
+				_ = h.respondError(msg.ID, acpproxy.CodeInternalError, "agent stream error: "+err.Error())
 				return
 			}
 
@@ -489,7 +489,7 @@ func (h *Handler) handleSessionPrompt(ctx context.Context, msg *Message) error {
 				}
 				notification := Message{
 					JSONRPC: "2.0",
-					Method:  agentacp.MethodSessionUpdate,
+					Method:  acpproxy.MethodSessionUpdate,
 					Params:  paramsData,
 				}
 				nData, merr2 := json.Marshal(notification)

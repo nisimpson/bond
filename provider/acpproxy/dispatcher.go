@@ -1,4 +1,4 @@
-package agentacp
+package acpproxy
 
 import (
 	"context"
@@ -85,7 +85,7 @@ func (d *Dispatcher) Request(ctx context.Context, method string, params any) (*M
 	if params != nil {
 		data, err := json.Marshal(params)
 		if err != nil {
-			return nil, fmt.Errorf("agentacp: marshal params: %w", err)
+			return nil, fmt.Errorf("acpproxy: marshal params: %w", err)
 		}
 		paramsData = data
 	}
@@ -107,11 +107,11 @@ func (d *Dispatcher) Request(ctx context.Context, method string, params any) (*M
 	data, err := json.Marshal(msg)
 	if err != nil {
 		d.pending.Delete(id)
-		return nil, fmt.Errorf("agentacp: marshal request: %w", err)
+		return nil, fmt.Errorf("acpproxy: marshal request: %w", err)
 	}
 	if err := d.transport.WriteMessage(data); err != nil {
 		d.pending.Delete(id)
-		return nil, fmt.Errorf("agentacp: write request: %w", err)
+		return nil, fmt.Errorf("acpproxy: write request: %w", err)
 	}
 
 	// Wait for response, cancellation, or shutdown.
@@ -143,7 +143,7 @@ func (d *Dispatcher) Notify(method string, params any) error {
 	if params != nil {
 		data, err := json.Marshal(params)
 		if err != nil {
-			return fmt.Errorf("agentacp: marshal params: %w", err)
+			return fmt.Errorf("acpproxy: marshal params: %w", err)
 		}
 		paramsData = data
 	}
@@ -156,10 +156,10 @@ func (d *Dispatcher) Notify(method string, params any) error {
 
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("agentacp: marshal notification: %w", err)
+		return fmt.Errorf("acpproxy: marshal notification: %w", err)
 	}
 	if err := d.transport.WriteMessage(data); err != nil {
-		return fmt.Errorf("agentacp: write notification: %w", err)
+		return fmt.Errorf("acpproxy: write notification: %w", err)
 	}
 	return nil
 }

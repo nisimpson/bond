@@ -131,8 +131,8 @@ bond.Stream(ctx, agent, msgs, bond.AgentOptions{
 ```
 bond/                        Core interfaces (Agent, Tool, Block, Stream, Invoke)
 bond/agent/                  Orchestration: graph, swarm, AsTool
-bond/agent/agenta2a/         A2A protocol proxy (bond.Agent over remote A2A agent)
-bond/agent/agentacp/         ACP protocol client (bond.Agent over ACP transport)
+bond/provider/a2aproxy/      A2A protocol proxy (bond.Agent over remote A2A agent)
+bond/provider/acpproxy/      ACP protocol proxy (bond.Agent over ACP transport)
 bond/provider/bedrock/       Amazon Bedrock Converse streaming provider
 bond/provider/openai/        OpenAI-compatible streaming provider
 bond/provider/ollama/        Ollama local model provider
@@ -294,6 +294,7 @@ In SSE mode, the handler emits structured `ServerSession.Log` notifications duri
 
 Clients filter by logger name `"bond.agent"` to receive these events over the SSE connection. JSON mode (the default) continues to work exactly as before with no notifications.
 
+```go
 // Or deploy all at once with graceful shutdown
 agentcore.Serve(agent, opts)
 ```

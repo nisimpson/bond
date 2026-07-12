@@ -10,8 +10,8 @@ import (
 	"testing"
 	"testing/quick"
 
-	"github.com/nisimpson/bond/agent/agentacp"
 	"github.com/nisimpson/bond/bondtest"
+	"github.com/nisimpson/bond/provider/acpproxy"
 )
 
 // TestProperty_MalformedMessagesYieldParseError verifies that for any byte
@@ -51,8 +51,8 @@ func TestProperty_MalformedMessagesYieldParseError(t *testing.T) {
 			return false
 		}
 
-		if resp.Error.Code != agentacp.CodeParseError {
-			t.Logf("expected error code %d, got %d for input: %q", agentacp.CodeParseError, resp.Error.Code, input.Line)
+		if resp.Error.Code != acpproxy.CodeParseError {
+			t.Logf("expected error code %d, got %d for input: %q", acpproxy.CodeParseError, resp.Error.Code, input.Line)
 			return false
 		}
 
@@ -405,8 +405,8 @@ func TestProperty_UnknownMethodsYieldMethodNotFound(t *testing.T) {
 			t.Logf("expected error response for method %q, got result", methodStr)
 			return false
 		}
-		if resp.Error.Code != agentacp.CodeMethodNotFound {
-			t.Logf("expected error code %d for method %q, got %d", agentacp.CodeMethodNotFound, methodStr, resp.Error.Code)
+		if resp.Error.Code != acpproxy.CodeMethodNotFound {
+			t.Logf("expected error code %d for method %q, got %d", acpproxy.CodeMethodNotFound, methodStr, resp.Error.Code)
 			return false
 		}
 
@@ -569,9 +569,9 @@ func TestProperty_UnsupportedProtocolVersionsAreRejected(t *testing.T) {
 			t.Logf("expected error response for protocolVersion %d, got result", v)
 			return false
 		}
-		if resp.Error.Code != agentacp.CodeInvalidParams {
+		if resp.Error.Code != acpproxy.CodeInvalidParams {
 			t.Logf("expected error code %d for protocolVersion %d, got %d",
-				agentacp.CodeInvalidParams, v, resp.Error.Code)
+				acpproxy.CodeInvalidParams, v, resp.Error.Code)
 			return false
 		}
 
@@ -704,13 +704,13 @@ func TestProperty_PreInitializationRejection(t *testing.T) {
 			return false
 		}
 
-		// Verify error code is -32002 (agentacp.CodeServerNotInit).
+		// Verify error code is -32002 (acpproxy.CodeServerNotInit).
 		if resp.Error == nil {
 			t.Logf("expected error response for method %q, got result", methodStr)
 			return false
 		}
-		if resp.Error.Code != agentacp.CodeServerNotInit {
-			t.Logf("expected error code %d for method %q, got %d", agentacp.CodeServerNotInit, methodStr, resp.Error.Code)
+		if resp.Error.Code != acpproxy.CodeServerNotInit {
+			t.Logf("expected error code %d for method %q, got %d", acpproxy.CodeServerNotInit, methodStr, resp.Error.Code)
 			return false
 		}
 

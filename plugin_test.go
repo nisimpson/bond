@@ -80,13 +80,13 @@ func TestStream_PluginHooksFire(t *testing.T) {
 	var beforeStream, afterStream bool
 
 	plugin := bond.NewHooksPlugin("spy", func(r *bond.HookRegistry) {
-		bond.OnBefore(r, bond.BeforeHookFunc[*bond.BeforeStreamHook](func(ctx context.Context, e *bond.BeforeStreamHook) error {
+		bond.OnBefore(r, func(ctx context.Context, e *bond.BeforeStreamHook) error {
 			beforeStream = true
 			return nil
-		}))
-		bond.OnAfter(r, bond.AfterHookFunc[*bond.AfterStreamHook](func(ctx context.Context, e *bond.AfterStreamHook) {
+		})
+		bond.OnAfter(r, func(ctx context.Context, e *bond.AfterStreamHook) {
 			afterStream = true
-		}))
+		})
 	})
 
 	agent := &bondtest.Agent{Events: bondtest.TextEvents("hello")}
@@ -107,9 +107,9 @@ func TestStream_PluginHooksFire(t *testing.T) {
 
 func TestStream_BeforeStreamHookAbort(t *testing.T) {
 	plugin := bond.NewHooksPlugin("gatekeeper", func(r *bond.HookRegistry) {
-		bond.OnBefore(r, bond.BeforeHookFunc[*bond.BeforeStreamHook](func(ctx context.Context, e *bond.BeforeStreamHook) error {
+		bond.OnBefore(r, func(ctx context.Context, e *bond.BeforeStreamHook) error {
 			return bond.ErrAbort
-		}))
+		})
 	})
 
 	agent := &bondtest.Agent{Events: bondtest.TextEvents("should not reach")}
@@ -127,9 +127,9 @@ func TestStream_BeforeStreamHookAbort(t *testing.T) {
 
 func TestStream_BeforeToolCallHookAbort(t *testing.T) {
 	plugin := bond.NewHooksPlugin("blocker", func(r *bond.HookRegistry) {
-		bond.OnBefore(r, bond.BeforeHookFunc[*bond.BeforeToolCallHook](func(ctx context.Context, e *bond.BeforeToolCallHook) error {
+		bond.OnBefore(r, func(ctx context.Context, e *bond.BeforeToolCallHook) error {
 			return bond.ErrAbort
-		}))
+		})
 	})
 
 	agent := &bondtest.Agent{

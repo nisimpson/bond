@@ -3,22 +3,22 @@
 // code editors (Zed, JetBrains, VS Code) to connect to bond agents as
 // coding assistants.
 //
-// This package uses shared protocol types from agent/agentacp (Message,
+// This package uses shared protocol types from agent/acpproxy (Message,
 // ErrorObject, error codes, method constants) and transport implementations
-// from agent/agentacp/acpio (Transport, StdioProcess).
+// from agent/acpproxy/acpio (Transport, StdioProcess).
 package acp
 
 import (
-	"github.com/nisimpson/bond/agent/agentacp"
-	"github.com/nisimpson/bond/agent/agentacp/acpio"
+	"github.com/nisimpson/bond/provider/acpproxy"
+	"github.com/nisimpson/bond/provider/acpproxy/acpio"
 )
 
 // Protocol types used throughout this package.
 type (
-	Message     = agentacp.Message
-	ErrorObject = agentacp.ErrorObject
-	Command     = agentacp.Command
-	ReadWriter  = agentacp.ReadWriter
+	Message     = acpproxy.Message
+	ErrorObject = acpproxy.ErrorObject
+	Command     = acpproxy.Command
+	ReadWriter  = acpproxy.ReadWriter
 )
 
 // NewTransport creates a ndjson Transport from an io.Reader and io.Writer.

@@ -12,13 +12,13 @@ func TestHookRegistry_OnBeforeAndNotify(t *testing.T) {
 	registry := &bond.HookRegistry{}
 	var called bool
 
-	bond.OnBefore(registry, bond.BeforeHookFunc[*bond.BeforeStreamHook](func(ctx context.Context, e *bond.BeforeStreamHook) error {
+	bond.OnBefore(registry, func(ctx context.Context, e *bond.BeforeStreamHook) error {
 		called = true
 		if len(e.Messages) != 1 {
 			t.Errorf("expected 1 message, got %d", len(e.Messages))
 		}
 		return nil
-	}))
+	})
 
 	err := registry.Notify(context.Background(), &bond.BeforeStreamHook{
 		Messages: []bond.Message{{Role: bond.RoleUser}},
@@ -35,12 +35,12 @@ func TestHookRegistry_OnAfterAndNotify(t *testing.T) {
 	registry := &bond.HookRegistry{}
 	var called bool
 
-	bond.OnAfter(registry, bond.AfterHookFunc[*bond.AfterStreamHook](func(ctx context.Context, e *bond.AfterStreamHook) {
+	bond.OnAfter(registry, func(ctx context.Context, e *bond.AfterStreamHook) {
 		called = true
 		if len(e.Messages) != 2 {
 			t.Errorf("expected 2 messages, got %d", len(e.Messages))
 		}
-	}))
+	})
 
 	err := registry.Notify(context.Background(), &bond.AfterStreamHook{
 		Messages: []bond.Message{{Role: bond.RoleUser}, {Role: bond.RoleAssistant}},
@@ -57,15 +57,15 @@ func TestHookRegistry_FIFOOrder(t *testing.T) {
 	registry := &bond.HookRegistry{}
 	var order []int
 
-	bond.OnAfter(registry, bond.AfterHookFunc[*bond.AfterStreamHook](func(ctx context.Context, e *bond.AfterStreamHook) {
+	bond.OnAfter(registry, func(ctx context.Context, e *bond.AfterStreamHook) {
 		order = append(order, 1)
-	}))
-	bond.OnAfter(registry, bond.AfterHookFunc[*bond.AfterStreamHook](func(ctx context.Context, e *bond.AfterStreamHook) {
+	})
+	bond.OnAfter(registry, func(ctx context.Context, e *bond.AfterStreamHook) {
 		order = append(order, 2)
-	}))
-	bond.OnAfter(registry, bond.AfterHookFunc[*bond.AfterStreamHook](func(ctx context.Context, e *bond.AfterStreamHook) {
+	})
+	bond.OnAfter(registry, func(ctx context.Context, e *bond.AfterStreamHook) {
 		order = append(order, 3)
-	}))
+	})
 
 	_ = registry.Notify(context.Background(), &bond.AfterStreamHook{})
 
@@ -77,12 +77,12 @@ func TestHookRegistry_FIFOOrder(t *testing.T) {
 func TestHookRegistry_BeforeErrorJoining(t *testing.T) {
 	registry := &bond.HookRegistry{}
 
-	bond.OnBefore(registry, bond.BeforeHookFunc[*bond.BeforeModelInvokeHook](func(ctx context.Context, e *bond.BeforeModelInvokeHook) error {
+	bond.OnBefore(registry, func(ctx context.Context, e *bond.BeforeModelInvokeHook) error {
 		return errors.New("err1")
-	}))
-	bond.OnBefore(registry, bond.BeforeHookFunc[*bond.BeforeModelInvokeHook](func(ctx context.Context, e *bond.BeforeModelInvokeHook) error {
+	})
+	bond.OnBefore(registry, func(ctx context.Context, e *bond.BeforeModelInvokeHook) error {
 		return errors.New("err2")
-	}))
+	})
 
 	err := registry.Notify(context.Background(), &bond.BeforeModelInvokeHook{})
 	if err == nil {
@@ -97,10 +97,10 @@ func TestHookRegistry_BeforeErrorJoining(t *testing.T) {
 func TestHookRegistry_AfterNeverReturnsError(t *testing.T) {
 	registry := &bond.HookRegistry{}
 
-	bond.OnAfter(registry, bond.AfterHookFunc[*bond.AfterToolCallHook](func(ctx context.Context, e *bond.AfterToolCallHook) {
+	bond.OnAfter(registry, func(ctx context.Context, e *bond.AfterToolCallHook) {
 		// Even if this panicked, the error return from Notify would still be nil
 		// because AfterHookFunc.NotifyHookEvent always returns nil.
-	}))
+	})
 
 	err := registry.Notify(context.Background(), &bond.AfterToolCallHook{
 		ToolUse: &bond.ToolUseBlock{ID: "1", Name: "test"},
@@ -124,10 +124,10 @@ func TestHookRegistry_WrongType(t *testing.T) {
 	registry := &bond.HookRegistry{}
 	var called bool
 
-	bond.OnBefore(registry, bond.BeforeHookFunc[*bond.BeforeStreamHook](func(ctx context.Context, e *bond.BeforeStreamHook) error {
+	bond.OnBefore(registry, func(ctx context.Context, e *bond.BeforeStreamHook) error {
 		called = true
 		return nil
-	}))
+	})
 
 	// Notify with a different event type — should not call the hook.
 	_ = registry.Notify(context.Background(), &bond.AfterStreamHook{})

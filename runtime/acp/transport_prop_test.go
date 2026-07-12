@@ -8,7 +8,7 @@ import (
 	"testing"
 	"testing/quick"
 
-	"github.com/nisimpson/bond/agent/agentacp"
+	"github.com/nisimpson/bond/provider/acpproxy"
 )
 
 // TestProperty_JSONRPCMessageRoundTrip verifies that for any valid JSON-RPC 2.0
@@ -177,7 +177,7 @@ func generateResult(rand *rand.Rand) json.RawMessage {
 
 // generateError produces a random ErrorObject.
 func generateError(rand *rand.Rand) *ErrorObject {
-	codes := []int{agentacp.CodeParseError, agentacp.CodeInvalidRequest, agentacp.CodeMethodNotFound, agentacp.CodeInvalidParams, agentacp.CodeServerNotInit, agentacp.CodeNoActiveSession}
+	codes := []int{acpproxy.CodeParseError, acpproxy.CodeInvalidRequest, acpproxy.CodeMethodNotFound, acpproxy.CodeInvalidParams, acpproxy.CodeServerNotInit, acpproxy.CodeNoActiveSession}
 	errObj := &ErrorObject{
 		Code:    codes[rand.Intn(len(codes))],
 		Message: generateAlphanumeric(rand, 5+rand.Intn(20)),

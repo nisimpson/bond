@@ -126,7 +126,7 @@ func (f ToolConfirmationFunc) ConfirmToolUse(ctx context.Context, toolUse *ToolU
 // for write operations.
 func NewToolConfirmationPlugin(provider ToolConfirmationProvider) Plugin {
 	return NewHooksPlugin("tool_confirmation", func(registry *HookRegistry) {
-		OnBefore(registry, BeforeHookFunc[*BeforeToolCallHook](func(ctx context.Context, event *BeforeToolCallHook) error {
+		OnBefore(registry, func(ctx context.Context, event *BeforeToolCallHook) error {
 			allowed, err := provider.ConfirmToolUse(ctx, event.ToolUse)
 			if err != nil {
 				return fmt.Errorf("tool confirmation failed: %w", err)
@@ -135,6 +135,6 @@ func NewToolConfirmationPlugin(provider ToolConfirmationProvider) Plugin {
 				return fmt.Errorf("tool call %q denied by confirmation provider: %w", event.ToolUse.Name, ErrAbort)
 			}
 			return nil
-		}))
+		})
 	})
 }

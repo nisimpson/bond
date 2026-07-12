@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"github.com/nisimpson/bond"
-	"github.com/nisimpson/bond/agent/agentacp"
-	"github.com/nisimpson/bond/agent/agentacp/acpio"
+	"github.com/nisimpson/bond/provider/acpproxy"
+	"github.com/nisimpson/bond/provider/acpproxy/acpio"
 )
 
 func main() {
@@ -65,7 +65,7 @@ func main() {
 	}
 
 	// Wrap with debug logger if requested.
-	var transport agentacp.ReadWriter = proc
+	var transport acpproxy.ReadWriter = proc
 	if debug {
 		transport = &debugReadWriter{rw: proc}
 	}
@@ -77,7 +77,7 @@ func main() {
 	}
 
 	// Create the ACP client using the StdioProcess as the ReadWriter.
-	client := agentacp.NewClient(transport, agentacp.ClientOptions{
+	client := acpproxy.NewClient(transport, acpproxy.ClientOptions{
 		WorkingDir:     absWorkdir,
 		SystemPrompt:   system,
 		PermissionTier: tier,
@@ -134,22 +134,22 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-func parseTier(s string) agentacp.PermissionTier {
+func parseTier(s string) acpproxy.PermissionTier {
 	switch strings.ToLower(s) {
 	case "read":
-		return agentacp.TierRead
+		return acpproxy.TierRead
 	case "trust":
-		return agentacp.TierTrust
+		return acpproxy.TierTrust
 	default:
-		return agentacp.TierYOLO
+		return acpproxy.TierYOLO
 	}
 }
 
-func tierName(t agentacp.PermissionTier) string {
+func tierName(t acpproxy.PermissionTier) string {
 	switch t {
-	case agentacp.TierRead:
+	case acpproxy.TierRead:
 		return "read"
-	case agentacp.TierTrust:
+	case acpproxy.TierTrust:
 		return "trust"
 	default:
 		return "yolo"
@@ -165,7 +165,7 @@ func truncate(s string, max int) string {
 
 // debugReadWriter wraps a ReadWriter and logs all messages to stderr.
 type debugReadWriter struct {
-	rw agentacp.ReadWriter
+	rw acpproxy.ReadWriter
 }
 
 func (d *debugReadWriter) ReadMessage() (json.RawMessage, error) {

@@ -1,4 +1,4 @@
-package agenta2a
+package a2aproxy
 
 import (
 	"context"
@@ -16,21 +16,21 @@ type Client interface {
 	SendStreamingMessage(ctx context.Context, req *a2a.SendMessageRequest) iter.Seq2[a2a.Event, error]
 }
 
-// Proxy implements [bond.Agent] over an A2A protocol client. It translates
+// Agent implements [bond.Agent] over an A2A protocol client. It translates
 // bond messages into A2A protocol messages and A2A streaming events back
 // into bond StreamEvents.
-type Proxy struct {
+type Agent struct {
 	client Client
 }
 
 // NewProxy creates a [bond.Agent] backed by a remote A2A agent.
-func NewProxy(client Client) *Proxy {
-	return &Proxy{client: client}
+func NewProxy(client Client) *Agent {
+	return &Agent{client: client}
 }
 
 // Stream implements [bond.Agent]. It sends the last user message to the
 // remote agent via A2A streaming and translates events into bond StreamEvents.
-func (a *Proxy) Stream(ctx context.Context, messages []bond.Message) iter.Seq2[bond.StreamEvent, error] {
+func (a *Agent) Stream(ctx context.Context, messages []bond.Message) iter.Seq2[bond.StreamEvent, error] {
 	return func(yield func(bond.StreamEvent, error) bool) {
 		// Build A2A message from the last user message.
 		a2aMsg := bondToA2AMessage(messages[len(messages)-1])
@@ -143,4 +143,4 @@ func partsToStreamEvents(parts []*a2a.Part) []bond.StreamEvent {
 }
 
 // Verify interface compliance.
-var _ bond.Agent = (*Proxy)(nil)
+var _ bond.Agent = (*Agent)(nil)
