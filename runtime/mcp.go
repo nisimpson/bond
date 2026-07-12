@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -19,19 +20,28 @@ type MCPOptions struct {
 	MCPPath string
 	// PingPath is the health check endpoint path. Defaults to "/ping".
 	PingPath string
+	// SSEMode enables Server-Sent Events transport. When true, the handler
+	// uses text/event-stream responses and emits observability log notifications
+	// during send_message execution.
+	// When false (default), uses application/json responses with no notifications.
+	SSEMode bool
 }
 
 // MCPHandler serves the MCP protocol (streamable HTTP), exposing A2A
 // operations as MCP tools.
 type MCPHandler struct {
-	mux  *http.ServeMux
-	port string
+	mux    *http.ServeMux
+	port   string
+	bridge *mcpA2ABridge
 }
 
 // NewMCPHandler creates an MCP handler wrapping a bond.Agent.
 func NewMCPHandler(agent bond.Agent, opts MCPOptions) *MCPHandler {
 	executor := &bondExecutor{agent: agent, opts: opts.AgentOptions}
-	return NewMCPHandlerFromExecutor(executor, opts)
+	handler := NewMCPHandlerFromExecutor(executor, opts)
+	// Set agent on bridge for SSE mode direct execution.
+	handler.bridge.agent = agent
+	return handler
 }
 
 // NewMCPHandlerFromExecutor creates an MCP handler from a custom executor.
@@ -39,9 +49,14 @@ func NewMCPHandlerFromExecutor(executor a2asrv.AgentExecutor, opts MCPOptions) *
 	handlerOpts := append([]a2asrv.RequestHandlerOption{}, opts.A2AHandlerOptions...)
 	requestHandler := a2asrv.NewHandler(executor, handlerOpts...)
 
+	// Requirement: 1.4, 3.5, 5.4 — SSE mode fields for direct agent execution
 	bridge := &mcpA2ABridge{
-		handler: requestHandler,
-		card:    opts.Card,
+		handler:  requestHandler,
+		executor: executor,
+		agent:    nil, // set by NewMCPHandler when a bond.Agent is available
+		opts:     opts.AgentOptions,
+		card:     opts.Card,
+		sseMode:  opts.SSEMode,
 	}
 
 	buildServer := func(_ *http.Request) *mcp.Server {
@@ -53,9 +68,10 @@ func NewMCPHandlerFromExecutor(executor a2asrv.AgentExecutor, opts MCPOptions) *
 		return server
 	}
 
+	// Requirement: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6 — SSEMode maps to JSONResponse
 	streamableHandler := mcp.NewStreamableHTTPHandler(buildServer, &mcp.StreamableHTTPOptions{
 		Stateless:    true,
-		JSONResponse: true,
+		JSONResponse: !opts.SSEMode,
 	})
 
 	mcpPath := opts.MCPPath
@@ -77,7 +93,7 @@ func NewMCPHandlerFromExecutor(executor a2asrv.AgentExecutor, opts MCPOptions) *
 		HandlePing(opts.Options, w, r)
 	})
 
-	return &MCPHandler{mux: mux, port: port}
+	return &MCPHandler{mux: mux, port: port, bridge: bridge}
 }
 
 // Port returns the configured port.
@@ -92,9 +108,14 @@ func (h *MCPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // MCP ↔ A2A bridge (same as before, just in runtime package now)
 // ---------------------------------------------------------------------------
 
+// Requirement: 1.4, 3.5, 5.4 — SSE mode fields for direct agent execution
 type mcpA2ABridge struct {
-	handler a2asrv.RequestHandler
-	card    *a2a.AgentCard
+	handler  a2asrv.RequestHandler
+	executor a2asrv.AgentExecutor
+	agent    bond.Agent        // direct agent access for SSE mode execution
+	opts     bond.AgentOptions // base agent options
+	card     *a2a.AgentCard
+	sseMode  bool
 }
 
 // sendMessageInput is a simplified representation of an A2A message
@@ -162,11 +183,56 @@ func (b *mcpA2ABridge) handleSendMessage(ctx context.Context, req *mcp.CallToolR
 		msg.TaskID = a2a.TaskID(in.TaskID)
 	}
 
+	// Requirement: 3.1, 3.2, 5.3, 5.5 — SSE mode: invoke agent with observability, accumulate result.
+	if b.sseMode && b.agent != nil {
+		return b.handleSendMessageSSE(ctx, req, msg)
+	}
+
+	// JSON mode: delegate to requestHandler.SendMessage. The handler internally
+	// accumulates TaskArtifactUpdateEvent events from the executor and returns
+	// only the final result. No incremental events are forwarded over MCP.
+	// Requirement: 4.9, 5.1, 5.3
 	result, err := b.handler.SendMessage(ctx, &a2a.SendMessageRequest{Message: msg})
 	if err != nil {
 		return mcpError(err.Error()), nil, nil
 	}
 	return nil, result, nil
+}
+
+// handleSendMessageSSE runs the agent loop directly with the observability plugin
+// injected, accumulates the full response, and returns it as a CallToolResult.
+// Requirement: 3.1, 3.2, 5.5 — synchronous execution with observability notifications.
+func (b *mcpA2ABridge) handleSendMessageSSE(ctx context.Context, req *mcp.CallToolRequest, msg *a2a.Message) (*mcp.CallToolResult, any, error) {
+	// Create observability plugin bound to this request's session.
+	// Requirement: 2.2 — structured observability notifications via ServerSession.Log.
+	obsPlugin := &observabilityPlugin{
+		logFn: req.Session.Log,
+	}
+
+	// Build agent options with the observability plugin injected.
+	opts := b.opts
+	opts.Plugins = append(append([]bond.Plugin{}, opts.Plugins...), obsPlugin)
+
+	// Convert A2A message to bond messages.
+	messages := a2aMessageToBond(msg)
+
+	// Run the agent synchronously.
+	// Requirement: 3.1 — accumulate full response and return as single CallToolResult.
+	resp, err := bond.Invoke(ctx, b.agent, messages, opts)
+	if err != nil {
+		return mcpError(err.Error()), nil, nil
+	}
+
+	// Build text content including placeholders for non-text media.
+	text := resp.Text
+	for _, m := range resp.Media {
+		text += fmt.Sprintf("\n[media: type=%s, size=%d bytes]", m.MIMEType, len(m.Data))
+	}
+
+	// Return accumulated result as CallToolResult.
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: text}},
+	}, nil, nil
 }
 
 func (b *mcpA2ABridge) handleGetTask(ctx context.Context, req *mcp.CallToolRequest, in taskIDInput) (*mcp.CallToolResult, any, error) {
