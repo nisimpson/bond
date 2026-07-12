@@ -3,9 +3,9 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"iter"
 	"net/http"
-	"strings"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
@@ -92,7 +92,7 @@ type bondExecutor struct {
 
 func (e *bondExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
-		// Emit initial Task with "working" state — required by a2asrv as the first event.
+		// Requirement: 4.5 — yield Task{Working} before any artifact events.
 		if !yield(&a2a.Task{
 			ID:        execCtx.TaskID,
 			ContextID: execCtx.ContextID,
@@ -103,33 +103,119 @@ func (e *bondExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorCont
 
 		messages := a2aMessageToBond(execCtx.Message)
 
-		var textBuf strings.Builder
+		textArtifactID := a2a.ArtifactID(fmt.Sprintf("%s-text", execCtx.TaskID))
+		var hasText bool
+		var currentMediaMIME string
+		var mediaIndex int
+		// Track all active media artifact IDs for final lastChunk yields.
+		var mediaArtifactIDs []a2a.ArtifactID
+
 		for event, err := range bond.Stream(ctx, e.agent, messages, e.opts) {
+			// Requirement: 4.6 — on error, yield Task{Failed} with error message.
 			if err != nil {
-				yield(nil, err)
+				yield(&a2a.Task{
+					ID:        execCtx.TaskID,
+					ContextID: execCtx.ContextID,
+					Status: a2a.TaskStatus{
+						State:   a2a.TaskStateFailed,
+						Message: a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(err.Error())),
+					},
+				}, nil)
 				return
 			}
-			if event.Type == bond.StreamEventTextDelta && event.TextDelta != "" {
-				textBuf.WriteString(event.TextDelta)
+
+			switch event.Type {
+			case bond.StreamEventTextDelta:
+				if event.TextDelta == "" {
+					continue
+				}
+				hasText = true
+				// Requirement: 4.1 — text delta yields TaskArtifactUpdateEvent with lastChunk: false.
+				if !yield(&a2a.TaskArtifactUpdateEvent{
+					TaskID:    execCtx.TaskID,
+					ContextID: execCtx.ContextID,
+					Append:    true,
+					Artifact: &a2a.Artifact{
+						ID:    textArtifactID,
+						Name:  "agent_response",
+						Parts: a2a.ContentParts{a2a.NewTextPart(event.TextDelta)},
+					},
+					LastChunk: false,
+				}, nil) {
+					return
+				}
+
+			case bond.StreamEventMediaDelta:
+				if event.MediaDelta == nil {
+					continue
+				}
+				// Requirement: 4.2 — media delta yields TaskArtifactUpdateEvent with lastChunk: false.
+				// Requirement: 4.3 — assign unique artifact ID per distinct media stream.
+				// Note: a "distinct media stream" is identified by MIME type transitions.
+				// If the same MIME type reappears after a different one (e.g., png → wav → png),
+				// it gets a new artifact ID. Clients should not assume same-MIME means same-artifact.
+				if event.MediaDelta.MIMEType != currentMediaMIME {
+					// New distinct media stream detected.
+					currentMediaMIME = event.MediaDelta.MIMEType
+					mediaIndex++
+					mediaArtifactIDs = append(mediaArtifactIDs, a2a.ArtifactID(fmt.Sprintf("%s-media-%d", execCtx.TaskID, mediaIndex)))
+				}
+				currentMediaArtifactID := mediaArtifactIDs[len(mediaArtifactIDs)-1]
+
+				part := a2a.NewRawPart(event.MediaDelta.Data)
+				part.MediaType = event.MediaDelta.MIMEType
+
+				if !yield(&a2a.TaskArtifactUpdateEvent{
+					TaskID:    execCtx.TaskID,
+					ContextID: execCtx.ContextID,
+					Append:    true,
+					Artifact: &a2a.Artifact{
+						ID:    currentMediaArtifactID,
+						Parts: a2a.ContentParts{part},
+					},
+					LastChunk: false,
+				}, nil) {
+					return
+				}
 			}
 		}
 
-		// Emit completed Task with full artifacts.
-		task := &a2a.Task{
+		// Requirement: 4.4 — on stream completion, yield final lastChunk: true for each active artifact.
+		if hasText {
+			if !yield(&a2a.TaskArtifactUpdateEvent{
+				TaskID:    execCtx.TaskID,
+				ContextID: execCtx.ContextID,
+				Artifact: &a2a.Artifact{
+					ID:    textArtifactID,
+					Name:  "agent_response",
+					Parts: a2a.ContentParts{},
+				},
+				LastChunk: true,
+			}, nil) {
+				return
+			}
+		}
+		for _, mediaID := range mediaArtifactIDs {
+			if !yield(&a2a.TaskArtifactUpdateEvent{
+				TaskID:    execCtx.TaskID,
+				ContextID: execCtx.ContextID,
+				Artifact: &a2a.Artifact{
+					ID:    mediaID,
+					Parts: a2a.ContentParts{},
+				},
+				LastChunk: true,
+			}, nil) {
+				return
+			}
+		}
+
+		// Requirement: 4.7 — on empty stream, yield Task{Completed} with empty artifacts.
+		// Requirement: 4.4 — yield Task{Completed} after final artifact events.
+		yield(&a2a.Task{
 			ID:        execCtx.TaskID,
 			ContextID: execCtx.ContextID,
 			Status:    a2a.TaskStatus{State: a2a.TaskStateCompleted},
-		}
-		if textBuf.Len() > 0 {
-			task.Artifacts = []*a2a.Artifact{
-				{
-					ID:    "response",
-					Name:  "agent_response",
-					Parts: a2a.ContentParts{a2a.NewTextPart(textBuf.String())},
-				},
-			}
-		}
-		yield(task, nil)
+		}, nil)
 	}
 }
 

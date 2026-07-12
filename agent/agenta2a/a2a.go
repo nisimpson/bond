@@ -1,4 +1,4 @@
-package agent
+package agenta2a
 
 import (
 	"context"
@@ -10,27 +10,27 @@ import (
 	"github.com/nisimpson/bond"
 )
 
-// A2AClient defines the subset of A2A protocol client behavior needed
-// by A2AProxy. This allows mocking, wrapping, or alternative implementations.
-type A2AClient interface {
+// Client defines the subset of A2A protocol client behavior needed
+// by Proxy. This allows mocking, wrapping, or alternative implementations.
+type Client interface {
 	SendStreamingMessage(ctx context.Context, req *a2a.SendMessageRequest) iter.Seq2[a2a.Event, error]
 }
 
-// A2AProxy implements [bond.Agent] over an A2A protocol client. It translates
+// Proxy implements [bond.Agent] over an A2A protocol client. It translates
 // bond messages into A2A protocol messages and A2A streaming events back
 // into bond StreamEvents.
-type A2AProxy struct {
-	client A2AClient
+type Proxy struct {
+	client Client
 }
 
-// NewA2AProxy creates a [bond.Agent] backed by a remote A2A agent.
-func NewA2AProxy(client A2AClient) *A2AProxy {
-	return &A2AProxy{client: client}
+// NewProxy creates a [bond.Agent] backed by a remote A2A agent.
+func NewProxy(client Client) *Proxy {
+	return &Proxy{client: client}
 }
 
 // Stream implements [bond.Agent]. It sends the last user message to the
 // remote agent via A2A streaming and translates events into bond StreamEvents.
-func (a *A2AProxy) Stream(ctx context.Context, messages []bond.Message) iter.Seq2[bond.StreamEvent, error] {
+func (a *Proxy) Stream(ctx context.Context, messages []bond.Message) iter.Seq2[bond.StreamEvent, error] {
 	return func(yield func(bond.StreamEvent, error) bool) {
 		// Build A2A message from the last user message.
 		a2aMsg := bondToA2AMessage(messages[len(messages)-1])
@@ -143,4 +143,4 @@ func partsToStreamEvents(parts []*a2a.Part) []bond.StreamEvent {
 }
 
 // Verify interface compliance.
-var _ bond.Agent = (*A2AProxy)(nil)
+var _ bond.Agent = (*Proxy)(nil)
