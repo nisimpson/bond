@@ -36,7 +36,7 @@ func (p *permissionPlugin) Name() string       { return "acp_permission" }
 func (p *permissionPlugin) Tools() []bond.Tool { return nil }
 
 func (p *permissionPlugin) Init(r *bond.HookRegistry) {
-	bond.OnBefore(r, bond.BeforeHookFunc[*bond.BeforeToolCallHook](p.beforeToolCall))
+	bond.OnBefore(r, p.beforeToolCall)
 }
 
 // beforeToolCall sends a session/request_permission request to the client and

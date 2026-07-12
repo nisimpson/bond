@@ -33,69 +33,69 @@ func (p *observabilityPlugin) Tools() []bond.Tool { return nil }
 func (p *observabilityPlugin) Init(registry *bond.HookRegistry) {
 	// BeforeStreamHook — record start time and emit hook_fired notification.
 	// Requirement 2.3
-	bond.OnBefore(registry, bond.BeforeHookFunc[*bond.BeforeStreamHook](func(ctx context.Context, event *bond.BeforeStreamHook) error {
+	bond.OnBefore(registry, func(ctx context.Context, event *bond.BeforeStreamHook) error {
 		p.streamStart = time.Now()
 		p.notify(ctx, observabilityNotification{
 			Type:  "hook_fired",
 			Event: hookFiredEvent{Name: "BeforeStream"},
 		})
 		return nil
-	}))
+	})
 
 	// AfterStreamHook — emit hook_completed notification with duration.
 	// Requirement 2.4
-	bond.OnAfter(registry, bond.AfterHookFunc[*bond.AfterStreamHook](func(ctx context.Context, event *bond.AfterStreamHook) {
+	bond.OnAfter(registry, func(ctx context.Context, event *bond.AfterStreamHook) {
 		duration := time.Since(p.streamStart).String()
 		p.notify(ctx, observabilityNotification{
 			Type:  "hook_completed",
 			Event: hookCompletedEvent{Name: "AfterStream", Duration: duration},
 		})
-	}))
+	})
 
 	// BeforeModelInvokeHook — emit state_transition with state "thinking".
 	// Requirement 2.7
-	bond.OnBefore(registry, bond.BeforeHookFunc[*bond.BeforeModelInvokeHook](func(ctx context.Context, event *bond.BeforeModelInvokeHook) error {
+	bond.OnBefore(registry, func(ctx context.Context, event *bond.BeforeModelInvokeHook) error {
 		p.notify(ctx, observabilityNotification{
 			Type:  "state_transition",
 			Event: stateTransitionEvent{State: "thinking"},
 		})
 		return nil
-	}))
+	})
 
 	// AfterModelInvokeHook — emit state_transition with state "generating_response" when stop reason is end.
 	// Requirement 2.7
-	bond.OnAfter(registry, bond.AfterHookFunc[*bond.AfterModelInvokeHook](func(ctx context.Context, event *bond.AfterModelInvokeHook) {
+	bond.OnAfter(registry, func(ctx context.Context, event *bond.AfterModelInvokeHook) {
 		if event.StopReason == bond.StopReasonEnd {
 			p.notify(ctx, observabilityNotification{
 				Type:  "state_transition",
 				Event: stateTransitionEvent{State: "generating_response"},
 			})
 		}
-	}))
+	})
 
 	// BeforeToolCycleHook — emit state_transition with state "executing_tools".
 	// Requirement 2.7
-	bond.OnBefore(registry, bond.BeforeHookFunc[*bond.BeforeToolCycleHook](func(ctx context.Context, event *bond.BeforeToolCycleHook) error {
+	bond.OnBefore(registry, func(ctx context.Context, event *bond.BeforeToolCycleHook) error {
 		p.notify(ctx, observabilityNotification{
 			Type:  "state_transition",
 			Event: stateTransitionEvent{State: "executing_tools"},
 		})
 		return nil
-	}))
+	})
 
 	// BeforeToolCallHook — emit tool_invoked notification.
 	// Requirement 2.5
-	bond.OnBefore(registry, bond.BeforeHookFunc[*bond.BeforeToolCallHook](func(ctx context.Context, event *bond.BeforeToolCallHook) error {
+	bond.OnBefore(registry, func(ctx context.Context, event *bond.BeforeToolCallHook) error {
 		p.notify(ctx, observabilityNotification{
 			Type:  "tool_invoked",
 			Event: toolInvokedEvent{Name: event.ToolUse.Name},
 		})
 		return nil
-	}))
+	})
 
 	// AfterToolCallHook — emit tool_result notification with success indicator.
 	// Requirement 2.6
-	bond.OnAfter(registry, bond.AfterHookFunc[*bond.AfterToolCallHook](func(ctx context.Context, event *bond.AfterToolCallHook) {
+	bond.OnAfter(registry, func(ctx context.Context, event *bond.AfterToolCallHook) {
 		p.notify(ctx, observabilityNotification{
 			Type: "tool_result",
 			Event: toolResultEvent{
@@ -103,7 +103,7 @@ func (p *observabilityPlugin) Init(registry *bond.HookRegistry) {
 				Success: !event.Result.IsError,
 			},
 		})
-	}))
+	})
 }
 
 // Compile-time interface check.
