@@ -42,3 +42,4 @@ docs/archive/specs/*
 docs/backlog/*
 docs/private/*
 echoserver
+/bin/ollama
