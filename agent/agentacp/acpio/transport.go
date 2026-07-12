@@ -1,4 +1,4 @@
-package acp
+package acpio
 
 import (
 	"bufio"
@@ -12,14 +12,15 @@ import (
 // Set to 1 MiB to accommodate large tool results and code content.
 const maxScanTokenSize = 1024 * 1024
 
-// Transport handles reading and writing newline-delimited JSON-RPC messages.
+// Transport is the default ReadWriter implementation using newline-delimited
+// JSON over an io.Reader/io.Writer pair (e.g., stdio pipes, TCP connections).
 type Transport struct {
 	reader  *bufio.Scanner
 	writer  io.Writer
 	writeMu sync.Mutex // serializes writes
 }
 
-// NewTransport creates a transport from an io.Reader and io.Writer.
+// NewTransport creates a Transport from an io.Reader and io.Writer.
 func NewTransport(r io.Reader, w io.Writer) *Transport {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, maxScanTokenSize), maxScanTokenSize)
@@ -45,20 +46,15 @@ func (t *Transport) ReadMessage() (json.RawMessage, error) {
 	return msg, nil
 }
 
-// WriteMessage serializes msg to compact JSON, appends a newline, and writes
-// it atomically to the underlying writer. Concurrent calls are serialized via
-// a mutex.
-func (t *Transport) WriteMessage(msg any) error {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	data = append(data, '\n')
+// WriteMessage writes pre-serialized JSON data as a single line terminated by
+// a newline character. Concurrent calls are serialized via a mutex.
+func (t *Transport) WriteMessage(msg json.RawMessage) error {
+	data := append(msg, '\n')
 
 	t.writeMu.Lock()
 	defer t.writeMu.Unlock()
 
-	_, err = t.writer.Write(data)
+	_, err := t.writer.Write(data)
 	return err
 }
 

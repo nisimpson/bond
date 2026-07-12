@@ -15,12 +15,6 @@ func TestNewTransport(t *testing.T) {
 	if tr == nil {
 		t.Fatal("NewTransport returned nil")
 	}
-	if tr.reader == nil {
-		t.Fatal("reader is nil")
-	}
-	if tr.writer == nil {
-		t.Fatal("writer is nil")
-	}
 }
 
 func TestReadMessage_SingleLine(t *testing.T) {
@@ -102,7 +96,11 @@ func TestWriteMessage(t *testing.T) {
 		Method:  "test",
 	}
 
-	if err := tr.WriteMessage(msg); err != nil {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	if err := tr.WriteMessage(data); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -131,7 +129,11 @@ func TestWriteMessage_CompactJSON(t *testing.T) {
 		"params":  map[string]any{"key": "value"},
 	}
 
-	if err := tr.WriteMessage(msg); err != nil {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	if err := tr.WriteMessage(data); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -156,7 +158,8 @@ func TestRoundTrip(t *testing.T) {
 
 	// Write in a goroutine to avoid blocking.
 	go func() {
-		_ = writer.WriteMessage(original)
+		data, _ := json.Marshal(original)
+		_ = writer.WriteMessage(data)
 		pw.Close()
 	}()
 

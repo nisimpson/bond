@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/agent/agentacp"
 	"github.com/nisimpson/bond/bondtest"
 )
 
@@ -140,8 +141,8 @@ func TestServe_MalformedJSON(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error response")
 	}
-	if resp.Error.Code != CodeParseError {
-		t.Errorf("expected code %d, got %d", CodeParseError, resp.Error.Code)
+	if resp.Error.Code != agentacp.CodeParseError {
+		t.Errorf("expected code %d, got %d", agentacp.CodeParseError, resp.Error.Code)
 	}
 }
 
@@ -162,8 +163,8 @@ func TestServe_MissingJSONRPCField(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error response")
 	}
-	if resp.Error.Code != CodeParseError {
-		t.Errorf("expected code %d, got %d", CodeParseError, resp.Error.Code)
+	if resp.Error.Code != agentacp.CodeParseError {
+		t.Errorf("expected code %d, got %d", agentacp.CodeParseError, resp.Error.Code)
 	}
 }
 
@@ -184,8 +185,8 @@ func TestServe_MissingMethodField(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error response")
 	}
-	if resp.Error.Code != CodeParseError {
-		t.Errorf("expected code %d, got %d", CodeParseError, resp.Error.Code)
+	if resp.Error.Code != agentacp.CodeParseError {
+		t.Errorf("expected code %d, got %d", agentacp.CodeParseError, resp.Error.Code)
 	}
 }
 
@@ -213,8 +214,8 @@ func TestServe_UnknownMethod(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error response")
 	}
-	if resp.Error.Code != CodeMethodNotFound {
-		t.Errorf("expected code %d, got %d", CodeMethodNotFound, resp.Error.Code)
+	if resp.Error.Code != agentacp.CodeMethodNotFound {
+		t.Errorf("expected code %d, got %d", agentacp.CodeMethodNotFound, resp.Error.Code)
 	}
 }
 
@@ -409,8 +410,8 @@ func TestHandleInitialize_MissingProtocolVersion(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error response")
 	}
-	if resp.Error.Code != CodeInvalidParams {
-		t.Errorf("expected code %d, got %d", CodeInvalidParams, resp.Error.Code)
+	if resp.Error.Code != agentacp.CodeInvalidParams {
+		t.Errorf("expected code %d, got %d", agentacp.CodeInvalidParams, resp.Error.Code)
 	}
 	if resp.Error.Message != "protocolVersion field is required" {
 		t.Errorf("unexpected error message: %q", resp.Error.Message)
@@ -433,8 +434,8 @@ func TestHandleInitialize_UnsupportedProtocolVersion(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error response")
 	}
-	if resp.Error.Code != CodeInvalidParams {
-		t.Errorf("expected code %d, got %d", CodeInvalidParams, resp.Error.Code)
+	if resp.Error.Code != agentacp.CodeInvalidParams {
+		t.Errorf("expected code %d, got %d", agentacp.CodeInvalidParams, resp.Error.Code)
 	}
 	if resp.Error.Message != "unsupported protocol version" {
 		t.Errorf("unexpected error message: %q", resp.Error.Message)
@@ -474,8 +475,8 @@ func TestHandleInitialize_DoubleInitialize(t *testing.T) {
 	if resp2.Error == nil {
 		t.Fatal("expected error for second initialize")
 	}
-	if resp2.Error.Code != CodeInvalidRequest {
-		t.Errorf("expected code %d, got %d", CodeInvalidRequest, resp2.Error.Code)
+	if resp2.Error.Code != agentacp.CodeInvalidRequest {
+		t.Errorf("expected code %d, got %d", agentacp.CodeInvalidRequest, resp2.Error.Code)
 	}
 	if resp2.Error.Message != "already initialized" {
 		t.Errorf("unexpected error message: %q", resp2.Error.Message)
@@ -499,8 +500,8 @@ func TestHandleInitialize_NilParams(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error response")
 	}
-	if resp.Error.Code != CodeInvalidParams {
-		t.Errorf("expected code %d, got %d", CodeInvalidParams, resp.Error.Code)
+	if resp.Error.Code != agentacp.CodeInvalidParams {
+		t.Errorf("expected code %d, got %d", agentacp.CodeInvalidParams, resp.Error.Code)
 	}
 	if resp.Error.Message != "protocolVersion field is required" {
 		t.Errorf("unexpected error message: %q", resp.Error.Message)
@@ -525,8 +526,8 @@ func TestServe_PreInitializationGuard(t *testing.T) {
 		if resp.Error == nil {
 			t.Fatal("expected error response")
 		}
-		if resp.Error.Code != CodeServerNotInit {
-			t.Errorf("expected code %d, got %d", CodeServerNotInit, resp.Error.Code)
+		if resp.Error.Code != agentacp.CodeServerNotInit {
+			t.Errorf("expected code %d, got %d", agentacp.CodeServerNotInit, resp.Error.Code)
 		}
 		if resp.Error.Message != "server not initialized" {
 			t.Errorf("unexpected error message: %q", resp.Error.Message)
@@ -565,8 +566,8 @@ func TestServe_PreInitializationGuard(t *testing.T) {
 		if resp.Error == nil {
 			t.Fatal("expected error response")
 		}
-		if resp.Error.Code != CodeServerNotInit {
-			t.Errorf("expected code %d, got %d", CodeServerNotInit, resp.Error.Code)
+		if resp.Error.Code != agentacp.CodeServerNotInit {
+			t.Errorf("expected code %d, got %d", agentacp.CodeServerNotInit, resp.Error.Code)
 		}
 	})
 
@@ -625,8 +626,8 @@ func TestHandleSessionPrompt_NoSession(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error response for prompt without session")
 	}
-	if resp.Error.Code != CodeNoActiveSession {
-		t.Errorf("expected code %d, got %d", CodeNoActiveSession, resp.Error.Code)
+	if resp.Error.Code != agentacp.CodeNoActiveSession {
+		t.Errorf("expected code %d, got %d", agentacp.CodeNoActiveSession, resp.Error.Code)
 	}
 	if resp.Error.Message != "no active session" {
 		t.Errorf("unexpected error message: %q", resp.Error.Message)

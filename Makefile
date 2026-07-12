@@ -26,6 +26,7 @@ build:
 examples:
 	go build -tags examples -o bin/echoserver ./examples/echoserver
 	go build -tags examples -o bin/ollama ./examples/ollama
+	go build -tags examples -o bin/acpclient ./examples/acpclient
 
 ## clean: remove build artifacts
 .PHONY: clean

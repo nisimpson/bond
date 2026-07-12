@@ -1,4 +1,4 @@
-package acp
+package agentacp_test
 
 import (
 	"encoding/json"
@@ -9,6 +9,7 @@ import (
 	"testing/quick"
 
 	"github.com/nisimpson/bond/agent/agentacp"
+	"github.com/nisimpson/bond/agent/agentacp/acpio"
 )
 
 // TestProperty_JSONRPCMessageRoundTrip verifies that for any valid JSON-RPC 2.0
@@ -16,11 +17,12 @@ import (
 // into a pipe and reading it back via ReadMessage produces a message equivalent
 // to the original after deserialization.
 //
-// **Validates: Requirements 10.4, 1.1, 1.2**
+// Feature: acp-proxy, Property 1: JSON-RPC Message Round-Trip
+// **Validates: Requirements 12.5**
 func TestProperty_JSONRPCMessageRoundTrip(t *testing.T) {
-	f := func(msg Message) bool {
+	f := func(msg agentacp.Message) bool {
 		pr, pw := io.Pipe()
-		transport := NewTransport(pr, pw)
+		transport := acpio.NewTransport(pr, pw)
 
 		// Write in a goroutine since pipe is synchronous.
 		errCh := make(chan error, 1)
@@ -48,7 +50,7 @@ func TestProperty_JSONRPCMessageRoundTrip(t *testing.T) {
 		}
 
 		// Deserialize back into a Message.
-		var got Message
+		var got agentacp.Message
 		if err := json.Unmarshal(raw, &got); err != nil {
 			t.Logf("Unmarshal error: %v", err)
 			return false
@@ -63,8 +65,8 @@ func TestProperty_JSONRPCMessageRoundTrip(t *testing.T) {
 			t.Logf("Method mismatch: got %q, want %q", got.Method, msg.Method)
 			return false
 		}
-		if !rawMessageEqual(got.ID, msg.ID) {
-			t.Logf("ID mismatch: got %s, want %s", safeRawString(got.ID), safeRawString(msg.ID))
+		if !rawPtrEqual(got.ID, msg.ID) {
+			t.Logf("ID mismatch: got %s, want %s", safeRawStr(got.ID), safeRawStr(msg.ID))
 			return false
 		}
 		if !rawEqual(got.Params, msg.Params) {
@@ -75,7 +77,7 @@ func TestProperty_JSONRPCMessageRoundTrip(t *testing.T) {
 			t.Logf("Result mismatch: got %s, want %s", string(got.Result), string(msg.Result))
 			return false
 		}
-		if !errorObjectEqual(got.Error, msg.Error) {
+		if !errObjEqual(got.Error, msg.Error) {
 			t.Logf("Error mismatch")
 			return false
 		}
@@ -94,32 +96,34 @@ func TestProperty_JSONRPCMessageRoundTrip(t *testing.T) {
 	}
 }
 
+// --- Generators ---
+
 // generateMessage produces a valid JSON-RPC 2.0 message (request, response, or notification).
-func generateMessage(rand *rand.Rand) Message {
-	msg := Message{JSONRPC: "2.0"}
+func generateMessage(rnd *rand.Rand) agentacp.Message {
+	msg := agentacp.Message{JSONRPC: "2.0"}
 
 	// Randomly choose message type: 0=request, 1=response, 2=notification
-	switch rand.Intn(3) {
+	switch rnd.Intn(3) {
 	case 0:
 		// Request: has id and method, optional params
-		msg.ID = generateID(rand)
-		msg.Method = generateMethod(rand)
-		if rand.Intn(2) == 0 {
-			msg.Params = generateParams(rand)
+		msg.ID = generateID(rnd)
+		msg.Method = generateMethod(rnd)
+		if rnd.Intn(2) == 0 {
+			msg.Params = generateParams(rnd)
 		}
 	case 1:
 		// Response: has id and either result or error
-		msg.ID = generateID(rand)
-		if rand.Intn(2) == 0 {
-			msg.Result = generateResult(rand)
+		msg.ID = generateID(rnd)
+		if rnd.Intn(2) == 0 {
+			msg.Result = generateResult(rnd)
 		} else {
-			msg.Error = generateError(rand)
+			msg.Error = generateError(rnd)
 		}
 	case 2:
 		// Notification: has method, optional params, no id
-		msg.Method = generateMethod(rand)
-		if rand.Intn(2) == 0 {
-			msg.Params = generateParams(rand)
+		msg.Method = generateMethod(rnd)
+		if rnd.Intn(2) == 0 {
+			msg.Params = generateParams(rnd)
 		}
 	}
 
@@ -127,94 +131,102 @@ func generateMessage(rand *rand.Rand) Message {
 }
 
 // generateID produces a random JSON-RPC id (string or integer).
-func generateID(rand *rand.Rand) *json.RawMessage {
+func generateID(rnd *rand.Rand) *json.RawMessage {
 	var raw json.RawMessage
-	if rand.Intn(2) == 0 {
+	if rnd.Intn(2) == 0 {
 		// Integer id
-		id := rand.Intn(10000)
+		id := rnd.Intn(10000)
 		raw, _ = json.Marshal(id)
 	} else {
 		// String id
-		id := generateAlphanumeric(rand, 1+rand.Intn(12))
+		id := generateAlphanumeric(rnd, 1+rnd.Intn(12))
 		raw, _ = json.Marshal(id)
 	}
 	return &raw
 }
 
-// generateMethod produces a random method name like "session/prompt" or "initialize".
-func generateMethod(rand *rand.Rand) string {
+// generateMethod produces a random method name.
+func generateMethod(rnd *rand.Rand) string {
 	methods := []string{
 		"initialize",
 		"session/new",
 		"session/prompt",
 		"session/cancel",
+		"session/update",
+		"session/request_permission",
 		"tools/list",
 		"custom/method",
 	}
-	return methods[rand.Intn(len(methods))]
+	return methods[rnd.Intn(len(methods))]
 }
 
 // generateParams produces a random JSON object for params.
-func generateParams(rand *rand.Rand) json.RawMessage {
+func generateParams(rnd *rand.Rand) json.RawMessage {
 	params := map[string]any{}
-	n := rand.Intn(4)
+	n := rnd.Intn(4)
 	for i := 0; i < n; i++ {
-		key := generateAlphanumeric(rand, 3+rand.Intn(8))
-		params[key] = generateSimpleValue(rand)
+		key := generateAlphanumeric(rnd, 3+rnd.Intn(8))
+		params[key] = generateSimpleValue(rnd)
 	}
 	raw, _ := json.Marshal(params)
 	return raw
 }
 
 // generateResult produces a random JSON value for result.
-func generateResult(rand *rand.Rand) json.RawMessage {
+func generateResult(rnd *rand.Rand) json.RawMessage {
 	result := map[string]any{
-		"status": generateAlphanumeric(rand, 4+rand.Intn(6)),
+		"status": generateAlphanumeric(rnd, 4+rnd.Intn(6)),
 	}
 	raw, _ := json.Marshal(result)
 	return raw
 }
 
-// generateError produces a random ErrorObject.
-func generateError(rand *rand.Rand) *ErrorObject {
-	codes := []int{agentacp.CodeParseError, agentacp.CodeInvalidRequest, agentacp.CodeMethodNotFound, agentacp.CodeInvalidParams, agentacp.CodeServerNotInit, agentacp.CodeNoActiveSession}
-	errObj := &ErrorObject{
-		Code:    codes[rand.Intn(len(codes))],
-		Message: generateAlphanumeric(rand, 5+rand.Intn(20)),
+// generateError produces a random agentacp.ErrorObject.
+func generateError(rnd *rand.Rand) *agentacp.ErrorObject {
+	codes := []int{
+		agentacp.CodeParseError, agentacp.CodeInvalidRequest, agentacp.CodeMethodNotFound,
+		agentacp.CodeInvalidParams, agentacp.CodeInternalError, agentacp.CodeServerNotInit,
+		agentacp.CodeNoActiveSession,
 	}
-	if rand.Intn(2) == 0 {
-		data, _ := json.Marshal(map[string]string{"detail": generateAlphanumeric(rand, 5)})
+	errObj := &agentacp.ErrorObject{
+		Code:    codes[rnd.Intn(len(codes))],
+		Message: generateAlphanumeric(rnd, 5+rnd.Intn(20)),
+	}
+	if rnd.Intn(2) == 0 {
+		data, _ := json.Marshal(map[string]string{"detail": generateAlphanumeric(rnd, 5)})
 		errObj.Data = data
 	}
 	return errObj
 }
 
 // generateSimpleValue produces a random JSON-compatible simple value.
-func generateSimpleValue(rand *rand.Rand) any {
-	switch rand.Intn(4) {
+func generateSimpleValue(rnd *rand.Rand) any {
+	switch rnd.Intn(4) {
 	case 0:
-		return rand.Intn(1000)
+		return rnd.Intn(1000)
 	case 1:
-		return generateAlphanumeric(rand, 3+rand.Intn(10))
+		return generateAlphanumeric(rnd, 3+rnd.Intn(10))
 	case 2:
-		return rand.Intn(2) == 0
+		return rnd.Intn(2) == 0
 	default:
 		return nil
 	}
 }
 
 // generateAlphanumeric produces a random alphanumeric string of the given length.
-func generateAlphanumeric(rand *rand.Rand, length int) string {
+func generateAlphanumeric(rnd *rand.Rand, length int) string {
 	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
 	b := make([]byte, length)
 	for i := range b {
-		b[i] = chars[rand.Intn(len(chars))]
+		b[i] = chars[rnd.Intn(len(chars))]
 	}
 	return string(b)
 }
 
-// rawMessageEqual compares two *json.RawMessage pointers for JSON equivalence.
-func rawMessageEqual(a, b *json.RawMessage) bool {
+// --- Comparison helpers ---
+
+// rawPtrEqual compares two *json.RawMessage pointers for JSON equivalence.
+func rawPtrEqual(a, b *json.RawMessage) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -242,8 +254,8 @@ func rawEqual(a, b json.RawMessage) bool {
 	return reflect.DeepEqual(av, bv)
 }
 
-// errorObjectEqual compares two *ErrorObject for equivalence.
-func errorObjectEqual(a, b *ErrorObject) bool {
+// errObjEqual compares two *agentacp.ErrorObject for equivalence.
+func errObjEqual(a, b *agentacp.ErrorObject) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -256,8 +268,8 @@ func errorObjectEqual(a, b *ErrorObject) bool {
 	return rawEqual(a.Data, b.Data)
 }
 
-// safeRawString returns a string representation of a *json.RawMessage for logging.
-func safeRawString(r *json.RawMessage) string {
+// safeRawStr returns a string representation of a *json.RawMessage for logging.
+func safeRawStr(r *json.RawMessage) string {
 	if r == nil {
 		return "<nil>"
 	}
