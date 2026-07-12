@@ -1,4 +1,4 @@
-package agentacp
+package acpproxy
 
 import (
 	"encoding/json"
@@ -12,12 +12,12 @@ import (
 
 // Sentinel errors for client lifecycle states.
 var (
-	ErrNotStarted            = errors.New("agentacp: client not started")
-	ErrAlreadyStarted        = errors.New("agentacp: client already started")
-	ErrClosed                = errors.New("agentacp: client closed")
-	ErrConnectionLost        = errors.New("agentacp: connection lost")
-	ErrReconnectNotSupported = errors.New("agentacp: transport does not support reconnection")
-	ErrCancelTimeout         = errors.New("agentacp: cancel response timeout")
+	ErrNotStarted            = errors.New("acpproxy: client not started")
+	ErrAlreadyStarted        = errors.New("acpproxy: client already started")
+	ErrClosed                = errors.New("acpproxy: client closed")
+	ErrConnectionLost        = errors.New("acpproxy: connection lost")
+	ErrReconnectNotSupported = errors.New("acpproxy: transport does not support reconnection")
+	ErrCancelTimeout         = errors.New("acpproxy: cancel response timeout")
 )
 
 // ProtocolError wraps a JSON-RPC error response from the external agent.
@@ -28,7 +28,7 @@ type ProtocolError struct {
 }
 
 func (e *ProtocolError) Error() string {
-	return fmt.Sprintf("agentacp: protocol error %d: %s", e.Code, e.Message)
+	return fmt.Sprintf("acpproxy: protocol error %d: %s", e.Code, e.Message)
 }
 
 // ParseError indicates a malformed message was received from the external agent.
@@ -38,7 +38,7 @@ type ParseError struct {
 }
 
 func (e *ParseError) Error() string {
-	return fmt.Sprintf("agentacp: parse error: %v", e.Err)
+	return fmt.Sprintf("acpproxy: parse error: %v", e.Err)
 }
 
 func (e *ParseError) Unwrap() error {

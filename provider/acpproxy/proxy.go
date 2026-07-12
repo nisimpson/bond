@@ -1,4 +1,4 @@
-package agentacp
+package acpproxy
 
 import (
 	"context"
@@ -34,25 +34,25 @@ import (
 // Requirement: 6.1, 6.2, 6.3 — Stop reason mapping.
 // Requirement: 7.1, 7.2, 7.3, 7.4 — Cancel behavior.
 
-// ProxyAgent implements bond.Agent by delegating to the Client's ACP protocol.
+// Agent implements bond.Agent by delegating to the Client's ACP protocol.
 // Each call to Stream sends a session/prompt and translates session/update
 // notifications into bond.StreamEvent values.
-type ProxyAgent struct {
+type Agent struct {
 	client *Client
 }
 
 // Compile-time check that ProxyAgent satisfies bond.Agent.
-var _ bond.Agent = (*ProxyAgent)(nil)
+var _ bond.Agent = (*Agent)(nil)
 
 // Stream sends the conversation messages to the external ACP agent and returns
 // an iterator of streaming events. It extracts the last user message, sends it
 // as a session/prompt, and translates incoming notifications into bond events.
-func (p *ProxyAgent) Stream(ctx context.Context, messages []bond.Message) iter.Seq2[bond.StreamEvent, error] {
+func (p *Agent) Stream(ctx context.Context, messages []bond.Message) iter.Seq2[bond.StreamEvent, error] {
 	return func(yield func(bond.StreamEvent, error) bool) {
 		// 1. Extract prompt text from the last user message.
 		prompt := extractLastUserMessage(messages)
 		if prompt == "" {
-			yield(bond.StreamEvent{}, fmt.Errorf("agentacp: no user message found"))
+			yield(bond.StreamEvent{}, fmt.Errorf("acpproxy: no user message found"))
 			return
 		}
 
@@ -79,7 +79,7 @@ func (p *ProxyAgent) Stream(ctx context.Context, messages []bond.Message) iter.S
 				// Handle permission requests (server-initiated request: has ID + method).
 				if notif.Method == MethodRequestPermission && notif.ID != nil {
 					if err := p.handlePermissionRequest(ctx, notif); err != nil {
-						yield(bond.StreamEvent{}, fmt.Errorf("agentacp: permission response failed: %w", err))
+						yield(bond.StreamEvent{}, fmt.Errorf("acpproxy: permission response failed: %w", err))
 						return
 					}
 					continue
@@ -104,7 +104,7 @@ func (p *ProxyAgent) Stream(ctx context.Context, messages []bond.Message) iter.S
 					case notif := <-p.client.dispatcher.Notifications():
 						if notif.Method == MethodRequestPermission && notif.ID != nil {
 							if err := p.handlePermissionRequest(ctx, notif); err != nil {
-								yield(bond.StreamEvent{}, fmt.Errorf("agentacp: permission response failed: %w", err))
+								yield(bond.StreamEvent{}, fmt.Errorf("acpproxy: permission response failed: %w", err))
 								return
 							}
 							continue
@@ -122,7 +122,7 @@ func (p *ProxyAgent) Stream(ctx context.Context, messages []bond.Message) iter.S
 				// Map stop_reason to bond.StopReason and yield stop event.
 				var promptResp sessionPromptResponse
 				if err := json.Unmarshal(result.resp.Result, &promptResp); err != nil {
-					yield(bond.StreamEvent{}, fmt.Errorf("agentacp: parse prompt response: %w", err))
+					yield(bond.StreamEvent{}, fmt.Errorf("acpproxy: parse prompt response: %w", err))
 					return
 				}
 				stopReason := mapStopReason(promptResp.StopReason)
@@ -285,7 +285,7 @@ func translateNotification(msg *Message) (bond.StreamEvent, bool) {
 // external agent. It invokes the configured PermissionPolicy and responds directly
 // via the transport with outcome "selected" or "cancelled".
 // Returns an error if responding to the external agent fails.
-func (p *ProxyAgent) handlePermissionRequest(ctx context.Context, msg *Message) error {
+func (p *Agent) handlePermissionRequest(ctx context.Context, msg *Message) error {
 	// Parse the permission request params.
 	var params permissionRequestParams
 	if err := json.Unmarshal(msg.Params, &params); err != nil {
@@ -320,7 +320,7 @@ func (p *ProxyAgent) handlePermissionRequest(ctx context.Context, msg *Message) 
 
 // respondToPermission writes a JSON-RPC response to a permission request
 // directly to the transport. Returns an error if the write fails.
-func (p *ProxyAgent) respondToPermission(id *json.RawMessage, outcome string) error {
+func (p *Agent) respondToPermission(id *json.RawMessage, outcome string) error {
 	result, _ := json.Marshal(&permissionResponseResult{Outcome: outcome})
 	resp := &Message{
 		JSONRPC: "2.0",
@@ -329,7 +329,7 @@ func (p *ProxyAgent) respondToPermission(id *json.RawMessage, outcome string) er
 	}
 	data, err := json.Marshal(resp)
 	if err != nil {
-		return fmt.Errorf("agentacp: marshal permission response: %w", err)
+		return fmt.Errorf("acpproxy: marshal permission response: %w", err)
 	}
 	return p.client.transport.WriteMessage(data)
 }

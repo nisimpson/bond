@@ -1,4 +1,4 @@
-package agentacp
+package acpproxy
 
 import (
 	"bufio"
@@ -148,9 +148,9 @@ func TestProperty_PrimingMessageOrdering(t *testing.T) {
 }
 
 // TestHelperMockACPServer is not a real test. It acts as a mock ACP server
-// subprocess when invoked with AGENTACP_MOCK_SERVER=1 in the environment.
+// subprocess when invoked with acpproxy_MOCK_SERVER=1 in the environment.
 func TestHelperMockACPServer(t *testing.T) {
-	if os.Getenv("AGENTACP_MOCK_SERVER") != "1" {
+	if os.Getenv("acpproxy_MOCK_SERVER") != "1" {
 		t.Skip("not running as mock server")
 	}
 

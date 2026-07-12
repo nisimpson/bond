@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/nisimpson/bond"
-	"github.com/nisimpson/bond/agent/agentacp"
+	"github.com/nisimpson/bond/provider/acpproxy"
 )
 
 // toolCallNotification is the session/update notification for a tool_call event (pending).
@@ -52,7 +52,7 @@ func (tn *toolNotifier) beforeToolCall(ctx context.Context, event *bond.BeforeTo
 
 	notif := toolCallUpdateNotification{
 		SessionID:  session.ID,
-		Type:       agentacp.UpdateTypeToolCallUpdate,
+		Type:       acpproxy.UpdateTypeToolCallUpdate,
 		ToolCallID: event.ToolUse.ID,
 		Status:     "in_progress",
 	}
@@ -69,7 +69,7 @@ func (tn *toolNotifier) afterToolCall(ctx context.Context, event *bond.AfterTool
 
 	notif := toolCallUpdateNotification{
 		SessionID:  session.ID,
-		Type:       agentacp.UpdateTypeToolCallUpdate,
+		Type:       acpproxy.UpdateTypeToolCallUpdate,
 		ToolCallID: event.ToolUse.ID,
 	}
 
@@ -93,7 +93,7 @@ func (tn *toolNotifier) sendToolCallPending(toolUse *bond.ToolUseBlock) error {
 
 	notif := toolCallNotification{
 		SessionID:  session.ID,
-		Type:       agentacp.UpdateTypeToolCall,
+		Type:       acpproxy.UpdateTypeToolCall,
 		ToolCallID: toolUse.ID,
 		ToolName:   toolUse.Name,
 		Status:     "pending",
@@ -111,7 +111,7 @@ func (tn *toolNotifier) sendNotification(params any) error {
 
 	msg := Message{
 		JSONRPC: "2.0",
-		Method:  agentacp.MethodSessionUpdate,
+		Method:  acpproxy.MethodSessionUpdate,
 		Params:  data,
 	}
 

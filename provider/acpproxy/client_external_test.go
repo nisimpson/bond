@@ -1,4 +1,4 @@
-package agentacp_test
+package acpproxy_test
 
 import (
 	"bytes"
@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/nisimpson/bond"
-	"github.com/nisimpson/bond/agent/agentacp"
-	"github.com/nisimpson/bond/agent/agentacp/acpio"
+	"github.com/nisimpson/bond/provider/acpproxy"
+	"github.com/nisimpson/bond/provider/acpproxy/acpio"
 )
 
 const mockScript = `
@@ -38,7 +38,7 @@ for line in sys.stdin:
     sys.stdout.flush()
 `
 
-func newMockClient(t *testing.T, opts agentacp.ClientOptions, stdioOpts acpio.StdioOptions) *agentacp.Client {
+func newMockClient(t *testing.T, opts acpproxy.ClientOptions, stdioOpts acpio.StdioOptions) *acpproxy.Client {
 	t.Helper()
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 not available")
@@ -47,7 +47,7 @@ func newMockClient(t *testing.T, opts agentacp.ClientOptions, stdioOpts acpio.St
 	if err := proc.Start(); err != nil {
 		t.Fatalf("StdioProcess.Start() failed: %v", err)
 	}
-	return agentacp.NewClient(proc, opts)
+	return acpproxy.NewClient(proc, opts)
 }
 
 // TestReconnect_ReperformsInitialization verifies that Reconnect re-performs
@@ -56,7 +56,7 @@ func newMockClient(t *testing.T, opts agentacp.ClientOptions, stdioOpts acpio.St
 // Validates: Requirements 9.3, 9.4
 func TestReconnect_ReperformsInitialization(t *testing.T) {
 	proc := createMockProcess(t)
-	client := agentacp.NewClient(proc, agentacp.ClientOptions{
+	client := acpproxy.NewClient(proc, acpproxy.ClientOptions{
 		WorkingDir:   "/tmp",
 		SystemPrompt: "You are a test agent",
 	})
@@ -116,7 +116,7 @@ for line in sys.stdin:
 	if err := proc.Start(); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-	client := agentacp.NewClient(proc, agentacp.ClientOptions{WorkingDir: "/tmp"})
+	client := acpproxy.NewClient(proc, acpproxy.ClientOptions{WorkingDir: "/tmp"})
 
 	ctx := context.Background()
 	if err := client.Start(ctx); err != nil {
@@ -148,7 +148,7 @@ for line in sys.stdin:
 // Validates: Requirements 10.6
 func TestClient_StartTwice(t *testing.T) {
 	proc := createMockProcess(t)
-	client := agentacp.NewClient(proc, agentacp.ClientOptions{WorkingDir: "/tmp"})
+	client := acpproxy.NewClient(proc, acpproxy.ClientOptions{WorkingDir: "/tmp"})
 
 	ctx := context.Background()
 	if err := client.Start(ctx); err != nil {
@@ -157,7 +157,7 @@ func TestClient_StartTwice(t *testing.T) {
 	defer client.Close()
 
 	err := client.Start(ctx)
-	if !errors.Is(err, agentacp.ErrAlreadyStarted) {
+	if !errors.Is(err, acpproxy.ErrAlreadyStarted) {
 		t.Fatalf("expected ErrAlreadyStarted on second Start(), got %v", err)
 	}
 }
@@ -167,7 +167,7 @@ func TestClient_StartTwice(t *testing.T) {
 // Validates: Requirements 9.1
 func TestClient_ReconnectAfterClose(t *testing.T) {
 	proc := createMockProcess(t)
-	client := agentacp.NewClient(proc, agentacp.ClientOptions{WorkingDir: "/tmp"})
+	client := acpproxy.NewClient(proc, acpproxy.ClientOptions{WorkingDir: "/tmp"})
 
 	ctx := context.Background()
 	if err := client.Start(ctx); err != nil {
@@ -176,7 +176,7 @@ func TestClient_ReconnectAfterClose(t *testing.T) {
 	_ = client.Close()
 
 	err := client.Reconnect(ctx)
-	if !errors.Is(err, agentacp.ErrClosed) {
+	if !errors.Is(err, acpproxy.ErrClosed) {
 		t.Fatalf("expected ErrClosed on Reconnect after Close, got %v", err)
 	}
 }
@@ -187,7 +187,7 @@ func TestClient_ReconnectAfterClose(t *testing.T) {
 // Validates: Requirements 4.1
 func TestClient_StreamNoUserMessage(t *testing.T) {
 	proc := createMockProcess(t)
-	client := agentacp.NewClient(proc, agentacp.ClientOptions{WorkingDir: "/tmp"})
+	client := acpproxy.NewClient(proc, acpproxy.ClientOptions{WorkingDir: "/tmp"})
 
 	ctx := context.Background()
 	if err := client.Start(ctx); err != nil {
@@ -249,7 +249,7 @@ func TestProperty_ReconnectionReplaysPriming(t *testing.T) {
 		proc := acpio.NewStdioProcess(testBin, []string{
 			"-test.run=TestHelperMockACPServer",
 		}, acpio.StdioOptions{
-			Env:     []string{"AGENTACP_MOCK_SERVER=1"},
+			Env:     []string{"acpproxy_MOCK_SERVER=1"},
 			Stderr:  &stderrBuf,
 			Timeout: 5 * time.Second,
 		})
@@ -258,7 +258,7 @@ func TestProperty_ReconnectionReplaysPriming(t *testing.T) {
 			return false
 		}
 
-		client := agentacp.NewClient(proc, agentacp.ClientOptions{
+		client := acpproxy.NewClient(proc, acpproxy.ClientOptions{
 			WorkingDir:     "/tmp",
 			SystemPrompt:   systemPrompt,
 			InitialContext: initialContext,

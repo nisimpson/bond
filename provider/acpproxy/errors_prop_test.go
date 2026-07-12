@@ -1,4 +1,4 @@
-package agentacp
+package acpproxy
 
 import (
 	"fmt"
@@ -49,7 +49,7 @@ func TestProperty_ProtocolErrorWrapping(t *testing.T) {
 			t.Logf("Error() returned empty string")
 			return false
 		}
-		expectedPrefix := fmt.Sprintf("agentacp: protocol error %d: %s", code, message)
+		expectedPrefix := fmt.Sprintf("acpproxy: protocol error %d: %s", code, message)
 		if errStr != expectedPrefix {
 			t.Logf("Error() = %q, want %q", errStr, expectedPrefix)
 			return false

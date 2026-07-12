@@ -1,6 +1,6 @@
 //go:build integration
 
-package agentacp_test
+package acpproxy_test
 
 import (
 	"bufio"
@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nisimpson/bond/agent/agentacp/acpio"
+	"github.com/nisimpson/bond/agent/acpproxy/acpio"
 
 	bond "github.com/nisimpson/bond"
 )

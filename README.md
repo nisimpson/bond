@@ -131,8 +131,8 @@ bond.Stream(ctx, agent, msgs, bond.AgentOptions{
 ```
 bond/                        Core interfaces (Agent, Tool, Block, Stream, Invoke)
 bond/agent/                  Orchestration: graph, swarm, AsTool
-bond/agent/agenta2a/         A2A protocol proxy (bond.Agent over remote A2A agent)
-bond/agent/agentacp/         ACP protocol client (bond.Agent over ACP transport)
+bond/agent/a2aproxy/         A2A protocol proxy (bond.Agent over remote A2A agent)
+bond/agent/acpproxy/         ACP protocol client (bond.Agent over ACP transport)
 bond/provider/bedrock/       Amazon Bedrock Converse streaming provider
 bond/provider/openai/        OpenAI-compatible streaming provider
 bond/provider/ollama/        Ollama local model provider

@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/nisimpson/bond"
-	"github.com/nisimpson/bond/agent/agentacp"
+	"github.com/nisimpson/bond/provider/acpproxy"
 )
 
 // permissionPlugin implements bond.Plugin to intercept tool calls
@@ -76,7 +76,7 @@ func (p *permissionPlugin) beforeToolCall(ctx context.Context, event *bond.Befor
 	idRaw := json.RawMessage(fmt.Sprintf("%q", reqID))
 	msg := Message{
 		JSONRPC: "2.0",
-		Method:  agentacp.MethodRequestPermission,
+		Method:  acpproxy.MethodRequestPermission,
 		ID:      &idRaw,
 		Params:  paramsData,
 	}

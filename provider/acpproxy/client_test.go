@@ -1,4 +1,4 @@
-package agentacp
+package acpproxy
 
 import (
 	"context"
