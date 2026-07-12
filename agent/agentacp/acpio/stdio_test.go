@@ -116,7 +116,9 @@ func TestStdioProcess_StderrForwarding(t *testing.T) {
 // TestStdioProcess_EnvironmentVariables verifies that environment variables
 // are passed to the subprocess.
 func TestStdioProcess_EnvironmentVariables(t *testing.T) {
-	proc := NewStdioProcess("sh", []string{"-c", "echo $TEST_ACP_VAR"}, StdioOptions{
+	// Use "sh -c" with a script that prints the env var then waits for stdin to close.
+	// This prevents the pipe from closing before ReadMessage can read.
+	proc := NewStdioProcess("sh", []string{"-c", "echo $TEST_ACP_VAR && cat > /dev/null"}, StdioOptions{
 		Env: []string{"TEST_ACP_VAR=hello123"},
 	})
 	if err := proc.Start(); err != nil {
@@ -124,7 +126,7 @@ func TestStdioProcess_EnvironmentVariables(t *testing.T) {
 	}
 	defer proc.Close()
 
-	// The subprocess prints the env var and exits. Read the output.
+	// The subprocess prints the env var then blocks on cat. Read the output.
 	raw, err := proc.ReadMessage()
 	if err != nil {
 		t.Fatalf("ReadMessage() failed: %v", err)
