@@ -24,5 +24,5 @@ require (
 
 require (
 	github.com/a2aproject/a2a-go/v2 v2.3.1
-	github.com/google/uuid v1.6.0 // indirect
+	github.com/google/uuid v1.6.0
 )
