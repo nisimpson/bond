@@ -15,13 +15,15 @@ A(nother) Go framework for building agentic applications. Bond provides the stre
 ## Features
 
 - **Streaming agent loop** with parallel tool execution and context cancellation
-- **Provider-agnostic** — implement `bond.Agent` for any LLM (Bedrock included)
+- **Provider-agnostic** — implement `bond.Agent` for any LLM (Bedrock, OpenAI, Ollama included)
 - **Hooks and plugins** for cross-cutting concerns (logging, guardrails, metrics)
 - **Orchestration patterns** — graphs (LangGraph-style) and swarms (OpenAI Swarm-style)
-- **[A2A](https://google.github.io/A2A/) protocol support** — remote agent communication, tool delegation
-- **AgentCore runtime** — deploy to AWS Bedrock AgentCore with A2A, HTTP, and MCP handlers
+- **[A2A](https://google.github.io/A2A/) protocol support** — remote agent communication, tool delegation, incremental streaming
+- **Multiple runtimes** — AgentCore (AWS), generic HTTP/A2A/MCP, ACP for code editors
 - **MCP tool adapter** — use [MCP](https://modelcontextprotocol.io/) server tools in your agent
+- **MCP handler with SSE observability** — real-time lifecycle notifications during execution
 - **Tool registry** — expose large tool collections through a discovery gateway
+- **Built-in toolbox** — shell execution, file I/O, environment access
 - **Zero external deps in the root** — sub-packages isolate SDK dependencies
 
 ## Install
@@ -128,11 +130,18 @@ bond.Stream(ctx, agent, msgs, bond.AgentOptions{
 
 ```
 bond/                        Core interfaces (Agent, Tool, Block, Stream, Invoke)
-bond/agent/                  Orchestration: graph, swarm, A2A adapter, AsTool
+bond/agent/                  Orchestration: graph, swarm, AsTool
+bond/agent/agenta2a/         A2A protocol proxy (bond.Agent over remote A2A agent)
+bond/agent/agentacp/         ACP protocol client (bond.Agent over ACP transport)
 bond/provider/bedrock/       Amazon Bedrock Converse streaming provider
-bond/runtime/agentcore/      AWS AgentCore handlers (A2A, HTTP, MCP)
+bond/provider/openai/        OpenAI-compatible streaming provider
+bond/provider/ollama/        Ollama local model provider
+bond/runtime/                Generic protocol handlers (A2A, HTTP, MCP) for custom deployments
+bond/runtime/acp/            ACP handler for code editors (Zed, JetBrains, VS Code)
+bond/runtime/agentcore/      AWS Bedrock AgentCore defaults (ports, paths, session headers)
 bond/tool/                   Tool infrastructure (schema, MCP adapter, structured output)
 bond/extra/delegation/       A2A tool delegation (client + server)
+bond/extra/toolbox/          Built-in tools: shell, file I/O, environment
 bond/extra/toolregistry/     Tool discovery gateway plugin
 bond/bondtest/               Test utilities (deterministic agent, event helpers)
 ```
@@ -265,9 +274,58 @@ http.ListenAndServe(httpHandler.Port(), httpHandler)
 // MCP protocol (port 8000) — A2A operations as MCP tools
 mcpHandler := agentcore.NewMCPHandler(agent, opts)
 http.ListenAndServe(mcpHandler.Port(), mcpHandler)
+```
+
+### MCP Handler: SSE Mode and Observability
+
+Enable SSE mode for real-time visibility into long-running `send_message` calls:
+
+```go
+mcpHandler := agentcore.NewMCPHandler(agent, agentcore.MCPOptions{
+    SSEMode: true, // text/event-stream responses with observability notifications
+})
+```
+
+In SSE mode, the handler emits structured `ServerSession.Log` notifications during execution:
+
+- `state_transition` — thinking, executing_tools, generating_response
+- `tool_invoked` / `tool_result` — tool call lifecycle with names and success indicators
+- `hook_fired` / `hook_completed` — stream lifecycle boundaries with duration
+
+Clients filter by logger name `"bond.agent"` to receive these events over the SSE connection. JSON mode (the default) continues to work exactly as before with no notifications.
 
 // Or deploy all at once with graceful shutdown
 agentcore.Serve(agent, opts)
+```
+
+### Generic Runtime (Custom Deployments)
+
+For non-AgentCore deployments, use the `runtime` package directly with your own ports and paths:
+
+```go
+import "github.com/nisimpson/bond/runtime"
+
+handler := runtime.NewMCPHandler(agent, runtime.MCPOptions{
+    Port:    ":3000",
+    MCPPath: "/api/mcp",
+    SSEMode: true,
+})
+http.ListenAndServe(handler.Port(), handler)
+```
+
+### ACP Runtime (Editor Integration)
+
+Serve agents as coding assistants over stdio for editors like Zed, JetBrains, and VS Code:
+
+```go
+import "github.com/nisimpson/bond/runtime/acp"
+
+handler := acp.NewHandler(agent, acp.Options{
+    AgentName:    "bond-assist",
+    AgentVersion: "1.0.0",
+    Transport:    acp.DefaultTransport(),
+})
+handler.Serve(ctx)
 ```
 
 ## MCP Integration
