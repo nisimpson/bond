@@ -7,11 +7,15 @@ import (
 	"sync"
 
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/extra/approval"
 	"github.com/nisimpson/bond/provider/acpproxy"
 )
 
 // permissionPlugin implements bond.Plugin to intercept tool calls
 // and request client approval via the ACP protocol.
+//
+// It implements [approval.Gate] for [*bond.BeforeToolCallHook], delegating
+// the approval decision to the connected ACP client.
 type permissionPlugin struct {
 	transport ReadWriter
 	session   func() *Session
@@ -36,15 +40,16 @@ func (p *permissionPlugin) Name() string       { return "acp_permission" }
 func (p *permissionPlugin) Tools() []bond.Tool { return nil }
 
 func (p *permissionPlugin) Init(r *bond.HookRegistry) {
-	bond.OnBefore(r, p.beforeToolCall)
+	approval.Register(r, p)
 }
 
-// beforeToolCall sends a session/request_permission request to the client and
-// blocks until the client responds or the context is cancelled.
-func (p *permissionPlugin) beforeToolCall(ctx context.Context, event *bond.BeforeToolCallHook) error {
+// RequestApproval implements [approval.Gate] for [*bond.BeforeToolCallHook].
+// It sends a permission request to the ACP client and blocks until the client
+// responds or the context is cancelled.
+func (p *permissionPlugin) RequestApproval(ctx context.Context, event *bond.BeforeToolCallHook) (approval.Result, error) {
 	session := p.session()
 	if session == nil {
-		return nil
+		return approval.Result{Approved: true}, nil
 	}
 
 	// Generate a unique request ID for this permission request.
@@ -70,7 +75,7 @@ func (p *permissionPlugin) beforeToolCall(ctx context.Context, event *bond.Befor
 	}
 	paramsData, err := json.Marshal(params)
 	if err != nil {
-		return bond.ErrAbort
+		return approval.Result{Approved: false, Reason: "failed to marshal permission request"}, nil
 	}
 
 	idRaw := json.RawMessage(fmt.Sprintf("%q", reqID))
@@ -83,21 +88,21 @@ func (p *permissionPlugin) beforeToolCall(ctx context.Context, event *bond.Befor
 
 	msgData, err2 := json.Marshal(msg)
 	if err2 != nil {
-		return bond.ErrAbort
+		return approval.Result{Approved: false, Reason: "failed to marshal message"}, nil
 	}
 	if err := p.transport.WriteMessage(msgData); err != nil {
-		return bond.ErrAbort
+		return approval.Result{Approved: false, Reason: "failed to send permission request"}, nil
 	}
 
 	// Wait for the client's response or context cancellation.
 	select {
 	case resp := <-ch:
 		if resp.Outcome == "selected" {
-			return nil
+			return approval.Result{Approved: true}, nil
 		}
-		return bond.ErrAbort
+		return approval.Result{Approved: false, Reason: "client denied permission"}, nil
 	case <-ctx.Done():
-		return bond.ErrAbort
+		return approval.Result{Approved: false, Reason: "context cancelled"}, ctx.Err()
 	}
 }
 
@@ -144,4 +149,7 @@ func (p *permissionPlugin) handleResponse(msg *Message) {
 }
 
 // Verify interface compliance.
-var _ bond.Plugin = (*permissionPlugin)(nil)
+var (
+	_ bond.Plugin                             = (*permissionPlugin)(nil)
+	_ approval.Gate[*bond.BeforeToolCallHook] = (*permissionPlugin)(nil)
+)

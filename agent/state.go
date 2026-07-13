@@ -67,12 +67,12 @@ func (m *MapState) Keys() []string {
 // stateContextKey is the context key for accessing graph state.
 type stateContextKey struct{}
 
-// withState attaches a State to the context.
-func withState(ctx context.Context, state State) context.Context {
+// ContextWithState attaches a [State] to the context.
+func ContextWithState(ctx context.Context, state State) context.Context {
 	return context.WithValue(ctx, stateContextKey{}, state)
 }
 
-// StateFromContext retrieves the graph State from a context. Returns nil
+// StateFromContext retrieves the graph [State] from a context. Returns nil
 // if no state is attached (e.g., not running inside a graph).
 func StateFromContext(ctx context.Context) State {
 	s, _ := ctx.Value(stateContextKey{}).(State)
