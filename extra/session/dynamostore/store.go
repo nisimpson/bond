@@ -1,4 +1,4 @@
-// Package dynamostore provides a DynamoDB-backed implementation of [session.SessionStore].
+// Package dynamostore provides a DynamoDB-backed implementation of [session.Store].
 // It isolates the AWS SDK dependency from the session core package.
 package dynamostore
 
@@ -44,7 +44,7 @@ type Store struct {
 }
 
 // compile-time interface check
-var _ session.SessionStore = (*Store)(nil)
+var _ session.Store = (*Store)(nil)
 
 // New creates a DynamoDB-backed session store.
 func New(opts Options) *Store {

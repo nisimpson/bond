@@ -4,12 +4,12 @@
 // # Session Persistence
 //
 // The session package enables stateful conversations by persisting message history
-// across requests. It defines the [SessionStore] interface for storage backends and
+// across requests. It defines the [Store] interface for storage backends and
 // provides an [InMemoryStore] for development and testing.
 //
 // # Storage Backends
 //
-// The [SessionStore] interface abstracts the persistence layer. Implementations include:
+// The [Store] interface abstracts the persistence layer. Implementations include:
 //
 //   - [InMemoryStore]: Thread-safe, in-process store for development and testing.
 //   - dynamostore.Store: DynamoDB-backed store for production (in sub-package).

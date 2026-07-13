@@ -18,7 +18,7 @@ type SessionIDResolver func(ctx context.Context) (string, error)
 // SessionPluginOptions configures the SessionPlugin.
 type SessionPluginOptions struct {
 	// Store is the backing SessionStore.
-	Store SessionStore
+	Store Store
 	// ResolveID extracts the session ID from the context.
 	ResolveID SessionIDResolver
 }
