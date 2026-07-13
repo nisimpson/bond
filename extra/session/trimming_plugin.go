@@ -1,4 +1,4 @@
-package conversation
+package session
 
 import (
 	"context"
@@ -76,24 +76,24 @@ func (p *TrimmingPlugin) Init(registry *bond.HookRegistry) {
 //   - the trim operation itself fails
 func (p *TrimmingPlugin) Recover(ctx context.Context, err error, messages []bond.Message) ([]bond.Message, error) {
 	if !p.opts.AutoRecover {
-		return nil, fmt.Errorf("conversation: auto-recovery is not enabled: %w", err)
+		return nil, fmt.Errorf("session: auto-recovery is not enabled: %w", err)
 	}
 
 	if !errors.Is(err, bond.ErrContextOverflow) {
-		return nil, fmt.Errorf("conversation: not a context overflow error: %w", err)
+		return nil, fmt.Errorf("session: not a context overflow error: %w", err)
 	}
 
 	p.mu.Lock()
 	if p.retryCount >= p.opts.MaxRetries {
 		p.mu.Unlock()
-		return nil, fmt.Errorf("conversation: max retries (%d) exhausted: %w", p.opts.MaxRetries, err)
+		return nil, fmt.Errorf("session: max retries (%d) exhausted: %w", p.opts.MaxRetries, err)
 	}
 	p.retryCount++
 	p.mu.Unlock()
 
 	trimmed, trimErr := p.opts.Manager.Trim(ctx, messages)
 	if trimErr != nil {
-		return nil, fmt.Errorf("conversation: trim during recovery failed: %w", trimErr)
+		return nil, fmt.Errorf("session: trim during recovery failed: %w", trimErr)
 	}
 
 	return trimmed, nil

@@ -1,4 +1,4 @@
-package conversation
+package session
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func TestProperty_TrimPreservesMessageOrdering(t *testing.T) {
 		for _, outMsg := range result {
 			found := false
 			for inputIdx < len(messages) {
-				if messagesEqual(outMsg, messages[inputIdx]) {
+				if singleMessageEqual(outMsg, messages[inputIdx]) {
 					inputIdx++
 					found = true
 					break
@@ -109,7 +109,7 @@ func TestProperty_TrimmingPluginHookAppliesTrimResult(t *testing.T) {
 		}
 
 		for i := range expected {
-			if !messagesEqual(hook.Messages[i], expected[i]) {
+			if !singleMessageEqual(hook.Messages[i], expected[i]) {
 				t.Logf("message mismatch at index %d", i)
 				return false
 			}
@@ -274,8 +274,8 @@ func (m *failingManager) Trim(_ context.Context, _ []bond.Message) ([]bond.Messa
 	return nil, m.err
 }
 
-// messagesEqual checks if two messages have the same role and text content.
-func messagesEqual(a, b bond.Message) bool {
+// singleMessageEqual checks if two messages have the same role and text content.
+func singleMessageEqual(a, b bond.Message) bool {
 	if a.Role != b.Role {
 		return false
 	}

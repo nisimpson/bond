@@ -1,4 +1,4 @@
-package conversation
+package session
 
 import (
 	"context"
@@ -41,15 +41,6 @@ func generateConversationPairs(rng *rand.Rand) []bond.Message {
 		}
 	}
 	return msgs
-}
-
-// randomASCII generates a random printable ASCII string of the given length.
-func randomASCII(rng *rand.Rand, length int) string {
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = byte(32 + rng.Intn(95)) // printable ASCII range
-	}
-	return string(b)
 }
 
 // countUserMessages counts the number of user messages in a slice (excluding preamble).

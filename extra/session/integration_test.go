@@ -1,4 +1,4 @@
-package conversation_test
+package session_test
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/nisimpson/bond"
-	"github.com/nisimpson/bond/extra/conversation"
 	"github.com/nisimpson/bond/extra/session"
 )
 
@@ -53,14 +52,14 @@ func TestIntegration_SessionAndTrimmingPluginComposition(t *testing.T) {
 	})
 
 	// TrimmingPlugin: sliding window of 2 pairs.
-	mgr, err := conversation.NewSlidingWindowManager(conversation.SlidingWindowOptions{
+	mgr, err := session.NewSlidingWindowManager(session.SlidingWindowOptions{
 		WindowSize: 2,
 	})
 	if err != nil {
 		t.Fatalf("NewSlidingWindowManager: %v", err)
 	}
 
-	trimmingPlugin := conversation.NewTrimmingPlugin(conversation.TrimmingPluginOptions{
+	trimmingPlugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{
 		Manager: mgr,
 	})
 
@@ -134,25 +133,33 @@ func TestIntegration_SessionAndTrimmingPluginComposition(t *testing.T) {
 	t.Logf("Composition test: 11 messages → %d after trimming (window=2)", len(modelHook.Messages))
 }
 
-// TestIntegration_PackageIndependence verifies that importing both
-// extra/conversation and extra/session does not cause import cycles.
-// The fact that this file compiles is sufficient proof.
+// TestIntegration_PluginComposition verifies that both plugins within the
+// session package compose correctly and that both implement bond.Plugin.
 //
 // Validates: Requirements 10.1, 10.2
-func TestIntegration_PackageIndependence(t *testing.T) {
-	// This test verifies package independence by compilation alone.
-	// If extra/conversation imported extra/session (or vice versa), this
-	// file would fail to compile due to an import cycle.
-
-	// Verify both packages expose their expected types independently.
-	var _ conversation.ConversationManager
-	var _ session.SessionStore
-
+func TestIntegration_PluginComposition(t *testing.T) {
 	// Both plugin types implement bond.Plugin.
-	var _ bond.Plugin = conversation.NewTrimmingPlugin(conversation.TrimmingPluginOptions{})
+	var _ bond.Plugin = session.NewTrimmingPlugin(session.TrimmingPluginOptions{})
 	var _ bond.Plugin = session.NewSessionPlugin(session.SessionPluginOptions{})
 
-	t.Log("No import cycle detected: both packages compile independently.")
+	// Verify both can be registered on the same HookRegistry without conflict.
+	registry := &bond.HookRegistry{}
+
+	store := session.NewInMemoryStore()
+	sessionPlugin := session.NewSessionPlugin(session.SessionPluginOptions{
+		Store: store,
+		ResolveID: func(_ context.Context) (string, error) {
+			return "test", nil
+		},
+	})
+
+	mgr, _ := session.NewSlidingWindowManager(session.SlidingWindowOptions{WindowSize: 5})
+	trimmingPlugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{Manager: mgr})
+
+	sessionPlugin.Init(registry)
+	trimmingPlugin.Init(registry)
+
+	t.Log("Both plugins compose on a single HookRegistry without conflict.")
 }
 
 // TestIntegration_ErrContextOverflowWrapping verifies that providers can wrap
@@ -177,14 +184,14 @@ func TestIntegration_ErrContextOverflowWrapping(t *testing.T) {
 	}
 
 	// Verify the TrimmingPlugin's Recover method detects the wrapped error.
-	mgr, err := conversation.NewSlidingWindowManager(conversation.SlidingWindowOptions{
+	mgr, err := session.NewSlidingWindowManager(session.SlidingWindowOptions{
 		WindowSize: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	plugin := conversation.NewTrimmingPlugin(conversation.TrimmingPluginOptions{
+	plugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{
 		Manager:     mgr,
 		AutoRecover: true,
 		MaxRetries:  2,
@@ -250,8 +257,8 @@ func TestIntegration_HookOrdering(t *testing.T) {
 	sessionPlugin.Init(registry)
 
 	// Register TrimmingPlugin.
-	mgr, _ := conversation.NewSlidingWindowManager(conversation.SlidingWindowOptions{WindowSize: 10})
-	trimmingPlugin := conversation.NewTrimmingPlugin(conversation.TrimmingPluginOptions{Manager: mgr})
+	mgr, _ := session.NewSlidingWindowManager(session.SlidingWindowOptions{WindowSize: 10})
+	trimmingPlugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{Manager: mgr})
 	trimmingPlugin.Init(registry)
 
 	// Register a tracking hook for BeforeModelInvokeHook after the plugins.

@@ -1,4 +1,4 @@
-package conversation
+package session
 
 import (
 	"context"
@@ -34,10 +34,10 @@ var _ ConversationManager = (*TokenBudgetManager)(nil)
 // Returns an error if opts.MaxTokens <= 0 or opts.Counter is nil.
 func NewTokenBudgetManager(opts TokenBudgetOptions) (*TokenBudgetManager, error) {
 	if opts.MaxTokens <= 0 {
-		return nil, fmt.Errorf("conversation: max tokens must be positive, got %d", opts.MaxTokens)
+		return nil, fmt.Errorf("session: max tokens must be positive, got %d", opts.MaxTokens)
 	}
 	if opts.Counter == nil {
-		return nil, fmt.Errorf("conversation: token counter must not be nil")
+		return nil, fmt.Errorf("session: token counter must not be nil")
 	}
 	return &TokenBudgetManager{
 		maxTokens: opts.MaxTokens,
@@ -90,7 +90,7 @@ func (m *TokenBudgetManager) Trim(_ context.Context, messages []bond.Message) ([
 
 	anchorTokens := m.counter(anchors)
 	if anchorTokens > m.maxTokens {
-		return nil, fmt.Errorf("conversation: anchors alone require %d tokens, exceeding budget of %d", anchorTokens, m.maxTokens)
+		return nil, fmt.Errorf("session: anchors alone require %d tokens, exceeding budget of %d", anchorTokens, m.maxTokens)
 	}
 
 	// The middle portion is everything between preamble end and the last user message.

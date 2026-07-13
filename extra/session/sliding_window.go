@@ -1,4 +1,4 @@
-package conversation
+package session
 
 import (
 	"context"
@@ -29,7 +29,7 @@ var _ ConversationManager = (*SlidingWindowManager)(nil)
 // Returns an error if opts.WindowSize <= 0.
 func NewSlidingWindowManager(opts SlidingWindowOptions) (*SlidingWindowManager, error) {
 	if opts.WindowSize <= 0 {
-		return nil, fmt.Errorf("conversation: window size must be positive, got %d", opts.WindowSize)
+		return nil, fmt.Errorf("session: window size must be positive, got %d", opts.WindowSize)
 	}
 	return &SlidingWindowManager{windowSize: opts.WindowSize}, nil
 }
