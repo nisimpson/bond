@@ -16,6 +16,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.13 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.12.7 // indirect
 	github.com/aws/smithy-go v1.27.3 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
@@ -28,4 +29,6 @@ require (
 	github.com/a2aproject/a2a-go/v2 v2.3.1
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.60.0
 	github.com/google/uuid v1.6.0
+	go.opentelemetry.io/otel v1.44.0
+	go.opentelemetry.io/otel/trace v1.44.0
 )

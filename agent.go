@@ -5,6 +5,7 @@ import (
 	"errors"
 	"iter"
 	"sync"
+	"time"
 )
 
 type JSONMarshaler = func(any) ([]byte, error)
@@ -72,9 +73,10 @@ type Agent interface {
 
 // AgentOptions configures the agent loop.
 type AgentOptions struct {
-	Tools    []Tool
-	Plugins  []Plugin
-	MaxTurns int // max tool-use round-trips; 0 means unlimited
+	Tools       []Tool
+	Plugins     []Plugin
+	MaxTurns    int         // max tool-use round-trips; 0 means unlimited
+	RetryPolicy RetryPolicy // retry on model invocation errors; nil means no retry
 }
 
 // streamLoop holds the state for a single Stream invocation.
@@ -89,9 +91,6 @@ type streamLoop struct {
 
 // notify dispatches a hook event. No-ops if the registry is nil.
 func (l *streamLoop) notify(ctx context.Context, event HookEvent) error {
-	if l.hooks == nil {
-		return nil
-	}
 	return l.hooks.Notify(ctx, event)
 }
 
@@ -140,6 +139,10 @@ func (l *streamLoop) toolSlice() []Tool {
 
 // run is the top-level iterator that drives the agent loop.
 func (l *streamLoop) run(ctx context.Context) iter.Seq2[StreamEvent, error] {
+	// Attach the hook registry to context so nested Agent implementations
+	// (graphs, swarms) can fire custom events through the same registry.
+	ctx = WithHookRegistry(ctx, l.hooks)
+
 	return func(yield func(StreamEvent, error) bool) {
 		// BeforeStream
 		if err := l.notify(ctx, &BeforeStreamHook{Messages: l.history}); err != nil {
@@ -156,22 +159,15 @@ func (l *streamLoop) run(ctx context.Context) iter.Seq2[StreamEvent, error] {
 				return
 			}
 
-			// BeforeModelInvoke
-			if err := l.notify(ctx, &BeforeModelInvokeHook{Messages: l.history}); err != nil {
-				if errors.Is(err, ErrAbort) {
-					return
-				}
-				yield(StreamEvent{}, err)
-				return
-			}
-
-			blocks, stopReason, ok := l.consumeStream(ctx, yield)
+			blocks, stopReason, ok := l.invokeWithRetry(ctx, yield)
 			if !ok {
 				return
 			}
 
-			// AfterModelInvoke (observer)
-			_ = l.notify(ctx, &AfterModelInvokeHook{Blocks: blocks, StopReason: stopReason})
+			// AfterModelInvoke (observer — may mutate blocks for guardrails)
+			hook := &AfterModelInvokeHook{Blocks: blocks, StopReason: stopReason}
+			_ = l.notify(ctx, hook)
+			blocks = hook.Blocks
 
 			assistantMsg := Message{Role: RoleAssistant, Content: blocks}
 			l.history = append(l.history, assistantMsg)
@@ -196,22 +192,17 @@ func (l *streamLoop) run(ctx context.Context) iter.Seq2[StreamEvent, error] {
 	}
 }
 
-// consumeStream reads all events from a single provider invocation, forwarding
-// them to the caller and accumulating the assistant's content blocks. Returns
-// false for ok if the yield was cancelled or an error occurred.
-func (l *streamLoop) consumeStream(ctx context.Context, yield func(StreamEvent, error) bool) ([]Block, StopReason, bool) {
-	var textBuf string
-	var blocks []Block
-	var stopReason StopReason
-
-	for event, err := range l.agent.Stream(withTools(ctx, l.toolSlice()), l.history) {
-		if err != nil {
-			yield(StreamEvent{}, err)
+// invokeWithRetry attempts a model invocation with retries according to the
+// configured RetryPolicy. Returns the same values as consumeStream.
+func (l *streamLoop) invokeWithRetry(ctx context.Context, yield func(StreamEvent, error) bool) ([]Block, StopReason, bool) {
+	for attempt := 0; ; attempt++ {
+		if ctx.Err() != nil {
+			yield(StreamEvent{}, ctx.Err())
 			return nil, "", false
 		}
 
-		// BeforeStreamEvent (gate) — abort stops consuming
-		if err := l.notify(ctx, &BeforeStreamEventHook{Event: event}); err != nil {
+		// BeforeModelInvoke
+		if err := l.notify(ctx, &BeforeModelInvokeHook{Messages: l.history, Attempt: attempt}); err != nil {
 			if errors.Is(err, ErrAbort) {
 				return nil, "", false
 			}
@@ -219,8 +210,62 @@ func (l *streamLoop) consumeStream(ctx context.Context, yield func(StreamEvent, 
 			return nil, "", false
 		}
 
-		if !yield(event, nil) {
+		blocks, stopReason, ok, streamErr := l.consumeStream(ctx, yield)
+		if streamErr == nil {
+			return blocks, stopReason, ok
+		}
+
+		// Check retry policy.
+		if l.opts.RetryPolicy == nil {
+			yield(StreamEvent{}, streamErr)
 			return nil, "", false
+		}
+
+		backoff, shouldRetry := l.opts.RetryPolicy.ShouldRetry(streamErr, attempt)
+		if !shouldRetry {
+			yield(StreamEvent{}, streamErr)
+			return nil, "", false
+		}
+
+		// Wait for backoff duration before retrying.
+		select {
+		case <-ctx.Done():
+			yield(StreamEvent{}, ctx.Err())
+			return nil, "", false
+		case <-time.After(backoff):
+		}
+	}
+}
+
+// consumeStream reads all events from a single provider invocation, forwarding
+// them to the caller and accumulating the assistant's content blocks.
+//
+// Returns (blocks, stopReason, yieldOK, streamErr):
+//   - yieldOK is false if the yield was cancelled (caller should return).
+//   - streamErr is non-nil if the provider returned an error (eligible for retry).
+//
+// Only one of yieldOK==false or streamErr!=nil will be set — not both.
+func (l *streamLoop) consumeStream(ctx context.Context, yield func(StreamEvent, error) bool) ([]Block, StopReason, bool, error) {
+	var textBuf string
+	var blocks []Block
+	var stopReason StopReason
+
+	for event, err := range l.agent.Stream(withTools(ctx, l.toolSlice()), l.history) {
+		if err != nil {
+			return nil, "", true, err
+		}
+
+		// BeforeStreamEvent (gate) — abort stops consuming
+		if err := l.notify(ctx, &BeforeStreamEventHook{Event: event}); err != nil {
+			if errors.Is(err, ErrAbort) {
+				return nil, "", false, nil
+			}
+			yield(StreamEvent{}, err)
+			return nil, "", false, nil
+		}
+
+		if !yield(event, nil) {
+			return nil, "", false, nil
 		}
 
 		switch event.Type {
@@ -243,7 +288,7 @@ func (l *streamLoop) consumeStream(ctx context.Context, yield func(StreamEvent, 
 		blocks = append(blocks, &TextBlock{Text: textBuf})
 	}
 
-	return blocks, stopReason, true
+	return blocks, stopReason, true, nil
 }
 
 // maxTurnsReached increments the turn counter and reports whether the

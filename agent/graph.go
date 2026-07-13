@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"iter"
 	"strings"
@@ -133,13 +134,29 @@ func (g *Graph) Stream(ctx context.Context, messages []bond.Message) iter.Seq2[b
 		}
 
 		// Attach state to context so tools can access it.
-		ctx = withState(ctx, g.state)
+		ctx = ContextWithState(ctx, g.state)
+		hooks := bond.HookRegistryFromContext(ctx)
 		history := append([]bond.Message{}, messages...)
 		current := g.entry
+		prev := ""
 
 		for current != EndNode {
 			if ctx.Err() != nil {
 				yield(bond.StreamEvent{}, ctx.Err())
+				return
+			}
+
+			// BeforeNodeTransition — approval gate for graph traversal.
+			if err := hooks.Notify(ctx, &BeforeNodeTransitionHook{
+				FromNode: prev,
+				ToNode:   current,
+				State:    g.state,
+			}); err != nil {
+				if errors.Is(err, bond.ErrAbort) {
+					yield(bond.StreamEvent{Type: bond.StreamEventStop, StopReason: bond.StopReasonEnd}, nil)
+					return
+				}
+				yield(bond.StreamEvent{}, fmt.Errorf("graph: before node transition: %w", err))
 				return
 			}
 
@@ -162,7 +179,11 @@ func (g *Graph) Stream(ctx context.Context, messages []bond.Message) iter.Seq2[b
 				}
 			}
 
+			// AfterNodeExecution — observer hook.
+			_ = hooks.Notify(ctx, &AfterNodeExecutionHook{Node: current, State: g.state})
+
 			// Evaluate edges to determine next node.
+			prev = current
 			current = g.nextNode(current)
 		}
 

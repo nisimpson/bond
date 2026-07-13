@@ -15,11 +15,12 @@ var ErrAbort = errors.New("bond: operation aborted by hook")
 // Hook Event Interfaces
 // ---------------------------------------------------------------------------
 
-// HookEvent is the sealed interface for all hook event types.
+// HookEvent is the interface for all hook event types.
 // Every hook event is either a [BeforeHookEvent] (gate) or [AfterHookEvent]
-// (observer).
+// (observer). Users may define custom hook events by implementing these
+// interfaces and firing them through a [HookRegistry].
 type HookEvent interface {
-	hookEvent() // sealed marker
+	HookEvent() // marker method
 }
 
 // BeforeHookEvent is implemented by gate hooks that fire before an operation.
@@ -27,7 +28,7 @@ type HookEvent interface {
 // gracefully skip the operation, or any other error to halt with that error.
 type BeforeHookEvent interface {
 	HookEvent
-	beforeHookEvent() // sealed marker
+	BeforeHookEvent() // marker method
 }
 
 // AfterHookEvent is implemented by observer hooks that fire after an operation.
@@ -35,7 +36,7 @@ type BeforeHookEvent interface {
 // cannot interrupt the agent loop.
 type AfterHookEvent interface {
 	HookEvent
-	afterHookEvent() // sealed marker
+	AfterHookEvent() // marker method
 }
 
 // ---------------------------------------------------------------------------
@@ -118,6 +119,9 @@ func OnAfter[T AfterHookEvent](r *HookRegistry, hook AfterHookFunc[T]) {
 // For after-events, hooks are called but errors are always nil (since
 // [AfterHookFunc] cannot produce errors).
 func (r *HookRegistry) Notify(ctx context.Context, event HookEvent) error {
+	if r == nil {
+		return nil
+	}
 	key := reflect.TypeOf(event)
 	r.mu.Lock()
 	hooks := r.hooks[key]
@@ -136,6 +140,22 @@ func (r *HookRegistry) Notify(ctx context.Context, event HookEvent) error {
 	return errors.Join(errs...)
 }
 
+// hookRegistryContextKey is the context key for the hook registry.
+type hookRegistryContextKey struct{}
+
+// WithHookRegistry attaches a [HookRegistry] to the context. Agent
+// implementations (graphs, swarms) can retrieve it to fire custom events.
+func WithHookRegistry(ctx context.Context, registry *HookRegistry) context.Context {
+	return context.WithValue(ctx, hookRegistryContextKey{}, registry)
+}
+
+// HookRegistryFromContext retrieves the [HookRegistry] from a context.
+// Returns nil if no registry is attached.
+func HookRegistryFromContext(ctx context.Context) *HookRegistry {
+	r, _ := ctx.Value(hookRegistryContextKey{}).(*HookRegistry)
+	return r
+}
+
 // ---------------------------------------------------------------------------
 // Before Hook Events (gates — can prevent operations)
 // ---------------------------------------------------------------------------
@@ -146,17 +166,18 @@ type BeforeStreamHook struct {
 	Messages []Message
 }
 
-func (*BeforeStreamHook) hookEvent()       {}
-func (*BeforeStreamHook) beforeHookEvent() {}
+func (*BeforeStreamHook) HookEvent()       {}
+func (*BeforeStreamHook) BeforeHookEvent() {}
 
 // BeforeModelInvokeHook fires before calling the provider's Stream method.
 // Return [ErrAbort] to skip the invocation, or any error to stop the loop.
 type BeforeModelInvokeHook struct {
 	Messages []Message // conversation state being sent to the model
+	Attempt  int       // 0 on first call, increments on retries
 }
 
-func (*BeforeModelInvokeHook) hookEvent()       {}
-func (*BeforeModelInvokeHook) beforeHookEvent() {}
+func (*BeforeModelInvokeHook) HookEvent()       {}
+func (*BeforeModelInvokeHook) BeforeHookEvent() {}
 
 // BeforeStreamEventHook fires before each raw [StreamEvent] is processed.
 // Return [ErrAbort] to stop consuming the stream.
@@ -164,8 +185,8 @@ type BeforeStreamEventHook struct {
 	Event StreamEvent
 }
 
-func (*BeforeStreamEventHook) hookEvent()       {}
-func (*BeforeStreamEventHook) beforeHookEvent() {}
+func (*BeforeStreamEventHook) HookEvent()       {}
+func (*BeforeStreamEventHook) BeforeHookEvent() {}
 
 // BeforeToolCycleHook fires before the batch of tool calls begins.
 // Return [ErrAbort] to skip the entire tool cycle, or any error to abort
@@ -174,8 +195,8 @@ type BeforeToolCycleHook struct {
 	ToolCalls []*ToolUseBlock
 }
 
-func (*BeforeToolCycleHook) hookEvent()       {}
-func (*BeforeToolCycleHook) beforeHookEvent() {}
+func (*BeforeToolCycleHook) HookEvent()       {}
+func (*BeforeToolCycleHook) BeforeHookEvent() {}
 
 // BeforeToolCallHook fires before a single tool is executed.
 // Return [ErrAbort] or any error to skip this tool call and surface the
@@ -184,8 +205,8 @@ type BeforeToolCallHook struct {
 	ToolUse *ToolUseBlock
 }
 
-func (*BeforeToolCallHook) hookEvent()       {}
-func (*BeforeToolCallHook) beforeHookEvent() {}
+func (*BeforeToolCallHook) HookEvent()       {}
+func (*BeforeToolCallHook) BeforeHookEvent() {}
 
 // ---------------------------------------------------------------------------
 // After Hook Events (observers — informational, cannot interrupt)
@@ -196,8 +217,8 @@ type AfterStreamHook struct {
 	Messages []Message // full conversation history at completion
 }
 
-func (*AfterStreamHook) hookEvent()      {}
-func (*AfterStreamHook) afterHookEvent() {}
+func (*AfterStreamHook) HookEvent()      {}
+func (*AfterStreamHook) AfterHookEvent() {}
 
 // AfterModelInvokeHook fires after a provider Stream call has fully drained.
 type AfterModelInvokeHook struct {
@@ -205,16 +226,16 @@ type AfterModelInvokeHook struct {
 	StopReason StopReason // why the model stopped
 }
 
-func (*AfterModelInvokeHook) hookEvent()      {}
-func (*AfterModelInvokeHook) afterHookEvent() {}
+func (*AfterModelInvokeHook) HookEvent()      {}
+func (*AfterModelInvokeHook) AfterHookEvent() {}
 
 // AfterToolCycleHook fires after all tool calls in a cycle complete.
 type AfterToolCycleHook struct {
 	Results []*ToolResultBlock
 }
 
-func (*AfterToolCycleHook) hookEvent()      {}
-func (*AfterToolCycleHook) afterHookEvent() {}
+func (*AfterToolCycleHook) HookEvent()      {}
+func (*AfterToolCycleHook) AfterHookEvent() {}
 
 // AfterToolCallHook fires after a single tool execution completes.
 type AfterToolCallHook struct {
@@ -222,13 +243,13 @@ type AfterToolCallHook struct {
 	Result  *ToolResultBlock
 }
 
-func (*AfterToolCallHook) hookEvent()      {}
-func (*AfterToolCallHook) afterHookEvent() {}
+func (*AfterToolCallHook) HookEvent()      {}
+func (*AfterToolCallHook) AfterHookEvent() {}
 
 // AfterMessageAppendedHook fires when a message is appended to conversation history.
 type AfterMessageAppendedHook struct {
 	Message Message
 }
 
-func (*AfterMessageAppendedHook) hookEvent()      {}
-func (*AfterMessageAppendedHook) afterHookEvent() {}
+func (*AfterMessageAppendedHook) HookEvent()      {}
+func (*AfterMessageAppendedHook) AfterHookEvent() {}

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"iter"
 	"strings"
@@ -81,7 +82,8 @@ func (s *Swarm) Stream(ctx context.Context, messages []bond.Message) iter.Seq2[b
 			return
 		}
 
-		ctx = withState(ctx, s.state)
+		ctx = ContextWithState(ctx, s.state)
+		hooks := bond.HookRegistryFromContext(ctx)
 		history := append([]bond.Message{}, messages...)
 		active := s.entry
 		handoffs := 0
@@ -147,8 +149,29 @@ func (s *Swarm) Stream(ctx context.Context, messages []bond.Message) iter.Seq2[b
 				break
 			}
 
+			// BeforeAgentHandoff — approval gate for swarm transfers.
+			if err := hooks.Notify(ctx, &BeforeAgentHandoffHook{
+				FromAgent: active,
+				ToAgent:   transferTo,
+				State:     s.state,
+			}); err != nil {
+				if errors.Is(err, bond.ErrAbort) {
+					break
+				}
+				yield(bond.StreamEvent{}, fmt.Errorf("swarm: before agent handoff: %w", err))
+				return
+			}
+
 			// Switch active agent.
+			prev := active
 			active = transferTo
+
+			// AfterAgentHandoff — observer hook.
+			_ = hooks.Notify(ctx, &AfterAgentHandoffHook{
+				FromAgent: prev,
+				ToAgent:   active,
+				State:     s.state,
+			})
 		}
 
 		yield(bond.StreamEvent{Type: bond.StreamEventStop, StopReason: bond.StopReasonEnd}, nil)
