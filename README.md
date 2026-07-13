@@ -24,6 +24,7 @@ A(nother) Go framework for building agentic applications. Bond provides the stre
 - **MCP handler with SSE observability** — real-time lifecycle notifications during execution
 - **Tool registry** — expose large tool collections through a discovery gateway
 - **Built-in toolbox** — shell execution, file I/O, environment access
+- **Session management** — persistent history and conversation trimming (sliding window, token budget)
 - **Zero external deps in the root** — sub-packages isolate SDK dependencies
 
 ## Install
@@ -143,6 +144,8 @@ bond/tool/                   Tool infrastructure (schema, MCP adapter, structure
 bond/tool/builtin/           Built-in tools: shell, file I/O, HTTP, environment
 bond/tool/registry/          Tool discovery gateway plugin
 bond/extra/delegation/       A2A tool delegation (client + server)
+bond/extra/session/          Session persistence and conversation trimming
+bond/extra/session/dynamostore/  DynamoDB-backed session store
 bond/bondtest/               Test utilities (deterministic agent, event helpers)
 ```
 
@@ -355,6 +358,62 @@ bond.Stream(ctx, agent, msgs, bond.AgentOptions{
     Plugins: []bond.Plugin{reg},
 })
 ```
+
+## Session Management (Memory)
+
+Agents need memory. The `extra/session` package provides persistent conversation state and context-window trimming — two plugins that compose on a single hook registry.
+
+### Session Persistence
+
+Load and save conversation history automatically:
+
+```go
+import "github.com/nisimpson/bond/extra/session"
+
+store := session.NewInMemoryStore() // or dynamostore.New(opts) for production
+
+plugin := session.NewSessionPlugin(session.SessionPluginOptions{
+    Store: store,
+    ResolveID: func(ctx context.Context) (string, error) {
+        return extractSessionID(ctx), nil
+    },
+})
+
+bond.Stream(ctx, agent, msgs, bond.AgentOptions{
+    Plugins: []bond.Plugin{plugin},
+})
+```
+
+The plugin loads history before the stream starts and saves each new message as it's appended.
+
+### Conversation Trimming
+
+Keep conversations within model context limits:
+
+```go
+// Sliding window: keep the last 10 user/assistant pairs
+mgr, _ := session.NewSlidingWindowManager(session.SlidingWindowOptions{
+    WindowSize: 10,
+})
+
+// Or token budget: fit within a token limit
+mgr, _ := session.NewTokenBudgetManager(session.TokenBudgetOptions{
+    MaxTokens: 8000,
+    Counter:   myTokenCounter,
+})
+
+trimPlugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{
+    Manager:     mgr,
+    AutoRecover: true, // retry on ErrContextOverflow
+    MaxRetries:  2,
+})
+
+bond.Stream(ctx, agent, msgs, bond.AgentOptions{
+    Plugins: []bond.Plugin{sessionPlugin, trimPlugin},
+})
+```
+
+Both strategies preserve system preamble messages and maintain relative message ordering.
 
 ## Testing (Training Exercise)
 
