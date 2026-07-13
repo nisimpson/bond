@@ -51,16 +51,14 @@ func (p *TrimmingPlugin) Tools() []bond.Tool { return nil }
 // Init registers hooks on the provided registry.
 // Requirement: CONV-4.2, CONV-4.3, CONV-4.4, CONV-4.5 — BeforeModelInvokeHook registration
 func (p *TrimmingPlugin) Init(registry *bond.HookRegistry) {
-	bond.OnBefore(registry, bond.BeforeHookFunc[*bond.BeforeModelInvokeHook](
-		func(ctx context.Context, hook *bond.BeforeModelInvokeHook) error {
-			trimmed, err := p.opts.Manager.Trim(ctx, hook.Messages)
-			if err != nil {
-				return err
-			}
-			hook.Messages = trimmed
-			return nil
-		},
-	))
+	bond.OnBefore(registry, func(ctx context.Context, hook *bond.BeforeModelInvokeHook) error {
+		trimmed, err := p.opts.Manager.Trim(ctx, hook.Messages)
+		if err != nil {
+			return err
+		}
+		hook.Messages = trimmed
+		return nil
+	})
 }
 
 // Recover attempts to recover from a context overflow error by trimming

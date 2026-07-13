@@ -49,7 +49,7 @@ func (p *SessionPlugin) Tools() []bond.Tool { return nil }
 // Requirement: CONV-9.4, CONV-9.6 — save on message append
 func (p *SessionPlugin) Init(registry *bond.HookRegistry) {
 	// BeforeStreamHook (gate): resolve session ID, load history, prepend to messages.
-	bond.OnBefore[*bond.BeforeStreamHook](registry, func(ctx context.Context, hook *bond.BeforeStreamHook) error {
+	bond.OnBefore(registry, func(ctx context.Context, hook *bond.BeforeStreamHook) error {
 		sessionID, err := p.opts.ResolveID(ctx)
 		if err != nil {
 			return err
@@ -74,7 +74,7 @@ func (p *SessionPlugin) Init(registry *bond.HookRegistry) {
 	})
 
 	// AfterMessageAppendedHook (observer): resolve session ID, append message, save.
-	bond.OnAfter[*bond.AfterMessageAppendedHook](registry, func(ctx context.Context, hook *bond.AfterMessageAppendedHook) {
+	bond.OnAfter(registry, func(ctx context.Context, hook *bond.AfterMessageAppendedHook) {
 		sessionID, err := p.opts.ResolveID(ctx)
 		if err != nil {
 			slog.Error("session: failed to resolve session ID for save", "error", err)
