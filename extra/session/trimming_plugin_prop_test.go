@@ -29,9 +29,9 @@ func TestProperty_TrimPreservesMessageOrdering(t *testing.T) {
 			return false
 		}
 
-		result, err := mgr.Trim(context.Background(), messages)
+		result, err := mgr.Select(context.Background(), messages)
 		if err != nil {
-			t.Logf("unexpected Trim error: %v", err)
+			t.Logf("unexpected Select error: %v", err)
 			return false
 		}
 
@@ -80,7 +80,7 @@ func TestProperty_TrimmingPluginHookAppliesTrimResult(t *testing.T) {
 		}
 
 		plugin := NewTrimmingPlugin(TrimmingPluginOptions{
-			Manager: mgr,
+			Policy: mgr,
 		})
 
 		// Register plugin hooks via Init
@@ -95,10 +95,10 @@ func TestProperty_TrimmingPluginHookAppliesTrimResult(t *testing.T) {
 			return false
 		}
 
-		// Compute expected trim result independently
-		expected, trimErr := mgr.Trim(context.Background(), messages)
+		// Compute expected select result independently
+		expected, trimErr := mgr.Select(context.Background(), messages)
 		if trimErr != nil {
-			t.Logf("unexpected Trim error: %v", trimErr)
+			t.Logf("unexpected Select error: %v", trimErr)
 			return false
 		}
 
@@ -132,12 +132,12 @@ func TestProperty_TrimmingPluginHookReturnsTrimError(t *testing.T) {
 		conversation := generateConversationPairs(rng)
 		messages := append(preamble, conversation...)
 
-		// Use a failing manager that always returns an error
+		// Use a failing policy that always returns an error
 		expectedErr := fmt.Errorf("trim failed: %s", randomASCII(rng, 10))
-		mgr := &failingManager{err: expectedErr}
+		mgr := &failingPolicy{err: expectedErr}
 
 		plugin := NewTrimmingPlugin(TrimmingPluginOptions{
-			Manager: mgr,
+			Policy: mgr,
 		})
 
 		registry := &bond.HookRegistry{}
@@ -184,7 +184,7 @@ func TestProperty_AutoRecoveryRetryIsBounded(t *testing.T) {
 		}
 
 		plugin := NewTrimmingPlugin(TrimmingPluginOptions{
-			Manager:     mgr,
+			Policy:      mgr,
 			AutoRecover: true,
 			MaxRetries:  maxRetries,
 		})
@@ -241,7 +241,7 @@ func TestProperty_RecoverRejectsNonOverflowErrors(t *testing.T) {
 		}
 
 		plugin := NewTrimmingPlugin(TrimmingPluginOptions{
-			Manager:     mgr,
+			Policy:      mgr,
 			AutoRecover: true,
 			MaxRetries:  3,
 		})
@@ -265,12 +265,12 @@ func TestProperty_RecoverRejectsNonOverflowErrors(t *testing.T) {
 // Test helpers
 // ---------------------------------------------------------------------------
 
-// failingManager is a ConversationManager that always returns a configured error.
-type failingManager struct {
+// failingPolicy is a HistoryPolicy that always returns a configured error.
+type failingPolicy struct {
 	err error
 }
 
-func (m *failingManager) Trim(_ context.Context, _ []bond.Message) ([]bond.Message, error) {
+func (m *failingPolicy) Select(_ context.Context, _ []bond.Message) ([]bond.Message, error) {
 	return nil, m.err
 }
 

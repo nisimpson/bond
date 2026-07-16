@@ -7,14 +7,15 @@ import (
 	"sync"
 
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/agent"
 )
 
 // Requirement: CONV-4.1, CONV-4.2, CONV-4.6 — TrimmingPlugin construction and package location
 
-// TrimmingPluginOptions configures the TrimmingPlugin.
+// TrimmingPluginOptions configures the [TrimmingPlugin].
 type TrimmingPluginOptions struct {
-	// Manager is the ConversationManager to invoke on each hook.
-	Manager ConversationManager
+	// Policy is the history policy to invoke on each hook.
+	Policy agent.HistoryPolicy
 	// AutoRecover enables automatic retry on ErrContextOverflow.
 	AutoRecover bool
 	// MaxRetries is the maximum number of trim-and-retry attempts.
@@ -33,7 +34,7 @@ type TrimmingPlugin struct {
 	retryCount int
 }
 
-// NewTrimmingPlugin creates a TrimmingPlugin with the given options.
+// NewTrimmingPlugin creates a [TrimmingPlugin] with the given options.
 // If AutoRecover is true and MaxRetries is 0, MaxRetries defaults to 1.
 func NewTrimmingPlugin(opts TrimmingPluginOptions) *TrimmingPlugin {
 	if opts.AutoRecover && opts.MaxRetries == 0 {
@@ -52,7 +53,7 @@ func (p *TrimmingPlugin) Tools() []bond.Tool { return nil }
 // Requirement: CONV-4.2, CONV-4.3, CONV-4.4, CONV-4.5 — BeforeModelInvokeHook registration
 func (p *TrimmingPlugin) Init(registry *bond.HookRegistry) {
 	bond.OnBefore(registry, func(ctx context.Context, hook *bond.BeforeModelInvokeHook) error {
-		trimmed, err := p.opts.Manager.Trim(ctx, hook.Messages)
+		trimmed, err := p.opts.Policy.Select(ctx, hook.Messages)
 		if err != nil {
 			return err
 		}
@@ -71,7 +72,7 @@ func (p *TrimmingPlugin) Init(registry *bond.HookRegistry) {
 //   - auto-recovery is not enabled
 //   - the error is not a context overflow error
 //   - max retries have been exhausted
-//   - the trim operation itself fails
+//   - the select operation itself fails
 func (p *TrimmingPlugin) Recover(ctx context.Context, err error, messages []bond.Message) ([]bond.Message, error) {
 	if !p.opts.AutoRecover {
 		return nil, fmt.Errorf("session: auto-recovery is not enabled: %w", err)
@@ -89,7 +90,7 @@ func (p *TrimmingPlugin) Recover(ctx context.Context, err error, messages []bond
 	p.retryCount++
 	p.mu.Unlock()
 
-	trimmed, trimErr := p.opts.Manager.Trim(ctx, messages)
+	trimmed, trimErr := p.opts.Policy.Select(ctx, messages)
 	if trimErr != nil {
 		return nil, fmt.Errorf("session: trim during recovery failed: %w", trimErr)
 	}

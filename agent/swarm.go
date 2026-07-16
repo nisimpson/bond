@@ -18,6 +18,9 @@ type SwarmAgent struct {
 	// Description tells other agents when and why to transfer to this one.
 	// This becomes the transfer tool's description that the active agent sees.
 	Description string
+	// HistoryPolicy optionally filters conversation history before this agent
+	// receives it on transfer. If nil, the full history is passed (default).
+	HistoryPolicy HistoryPolicy
 }
 
 // SwarmOptions configures a Swarm.
@@ -104,11 +107,22 @@ func (s *Swarm) Stream(ctx context.Context, messages []bond.Message) iter.Seq2[b
 			opts := agent.Options
 			opts.Tools = append(s.buildTools(active), opts.Tools...)
 
-			// Run the agent.
+			// Apply history policy if configured on the receiving agent.
+			agentHistory := history
+			if agent.HistoryPolicy != nil {
+				filtered, err := agent.HistoryPolicy.Select(ctx, history)
+				if err != nil {
+					yield(bond.StreamEvent{}, fmt.Errorf("swarm: history policy for %q: %w", active, err))
+					return
+				}
+				agentHistory = filtered
+			}
+
+			// Run the agent with (possibly filtered) history.
 			var textBuf strings.Builder
 			var transferTo string
 
-			for event, err := range bond.Stream(ctx, agent.Agent, history, opts) {
+			for event, err := range bond.Stream(ctx, agent.Agent, agentHistory, opts) {
 				if err != nil {
 					yield(bond.StreamEvent{}, err)
 					return

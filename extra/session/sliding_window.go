@@ -5,11 +5,12 @@ import (
 	"fmt"
 
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/agent"
 )
 
 // Requirement: CONV-2.1, CONV-2.5 — sliding window construction and validation
 
-// SlidingWindowOptions configures a SlidingWindowManager.
+// SlidingWindowOptions configures a [SlidingWindowManager].
 type SlidingWindowOptions struct {
 	// WindowSize is the maximum number of user/assistant message pairs to retain.
 	// Must be positive.
@@ -23,9 +24,9 @@ type SlidingWindowManager struct {
 }
 
 // compile-time interface compliance check
-var _ ConversationManager = (*SlidingWindowManager)(nil)
+var _ agent.HistoryPolicy = (*SlidingWindowManager)(nil)
 
-// NewSlidingWindowManager creates a SlidingWindowManager.
+// NewSlidingWindowManager creates a [SlidingWindowManager].
 // Returns an error if opts.WindowSize <= 0.
 func NewSlidingWindowManager(opts SlidingWindowOptions) (*SlidingWindowManager, error) {
 	if opts.WindowSize <= 0 {
@@ -34,14 +35,14 @@ func NewSlidingWindowManager(opts SlidingWindowOptions) (*SlidingWindowManager, 
 	return &SlidingWindowManager{windowSize: opts.WindowSize}, nil
 }
 
-// Requirement: CONV-2.2, CONV-2.3, CONV-2.4 — sliding window trim logic
+// Requirement: CONV-2.2, CONV-2.3, CONV-2.4 — sliding window select logic
 
-// Trim returns a subset of messages that retains at most the last N user/assistant
+// Select returns a subset of messages that retains at most the last N user/assistant
 // pairs, prepended with the system preamble. A "pair" is defined as a user message
 // followed by zero or more assistant messages until the next user message. If the
 // total number of pairs is within the window size, the original slice is returned
 // unchanged.
-func (m *SlidingWindowManager) Trim(_ context.Context, messages []bond.Message) ([]bond.Message, error) {
+func (m *SlidingWindowManager) Select(_ context.Context, messages []bond.Message) ([]bond.Message, error) {
 	// Identify the preamble: all messages before the first RoleUser message.
 	preambleEnd := 0
 	for i, msg := range messages {

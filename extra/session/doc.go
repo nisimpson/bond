@@ -18,8 +18,8 @@
 //
 // Large language models have finite context windows. As conversations grow,
 // the accumulated messages may exceed the model's capacity, causing errors or
-// degraded responses. The [ConversationManager] interface and concrete
-// implementations trim message slices to fit within configured constraints
+// degraded responses. The [agent.HistoryPolicy] interface and concrete
+// implementations select message subsets to fit within configured constraints
 // while preserving conversation coherence.
 //
 // Choose a trimming strategy and pass it to the [TrimmingPlugin]:

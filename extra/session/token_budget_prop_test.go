@@ -62,9 +62,9 @@ func TestProperty_TokenBudgetOutputFitsWithinBudget(t *testing.T) {
 			return false
 		}
 
-		result, err := mgr.Trim(context.Background(), messages)
+		result, err := mgr.Select(context.Background(), messages)
 		if err != nil {
-			t.Logf("unexpected Trim error: %v", err)
+			t.Logf("unexpected Select error: %v", err)
 			return false
 		}
 
@@ -131,9 +131,9 @@ func TestProperty_TokenBudgetPreservesPreambleAndLastUserMessage(t *testing.T) {
 			return false
 		}
 
-		result, err := mgr.Trim(context.Background(), messages)
+		result, err := mgr.Select(context.Background(), messages)
 		if err != nil {
-			t.Logf("unexpected Trim error: %v", err)
+			t.Logf("unexpected Select error: %v", err)
 			return false
 		}
 
@@ -224,9 +224,9 @@ func TestProperty_TokenBudgetInsufficientBudgetReturnsError(t *testing.T) {
 			return false
 		}
 
-		_, err = mgr.Trim(context.Background(), messages)
+		_, err = mgr.Select(context.Background(), messages)
 
-		// Property: Trim must return a non-nil error
+		// Property: Select must return a non-nil error
 		if err == nil {
 			t.Logf("expected error for budget %d < anchor cost %d, got nil", budget, anchorCost)
 			return false

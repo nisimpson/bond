@@ -5,12 +5,13 @@ import (
 	"fmt"
 
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/agent"
 )
 
 // TokenCounter estimates the token count for a message slice.
 type TokenCounter func(messages []bond.Message) int
 
-// TokenBudgetOptions configures a TokenBudgetManager.
+// TokenBudgetOptions configures a [TokenBudgetManager].
 type TokenBudgetOptions struct {
 	// MaxTokens is the maximum token budget. Must be positive.
 	MaxTokens int
@@ -28,9 +29,9 @@ type TokenBudgetManager struct {
 }
 
 // compile-time interface compliance check
-var _ ConversationManager = (*TokenBudgetManager)(nil)
+var _ agent.HistoryPolicy = (*TokenBudgetManager)(nil)
 
-// NewTokenBudgetManager creates a TokenBudgetManager.
+// NewTokenBudgetManager creates a [TokenBudgetManager].
 // Returns an error if opts.MaxTokens <= 0 or opts.Counter is nil.
 func NewTokenBudgetManager(opts TokenBudgetOptions) (*TokenBudgetManager, error) {
 	if opts.MaxTokens <= 0 {
@@ -45,14 +46,14 @@ func NewTokenBudgetManager(opts TokenBudgetOptions) (*TokenBudgetManager, error)
 	}, nil
 }
 
-// Requirement: CONV-3.2, CONV-3.3, CONV-3.4, CONV-3.6 — token budget trim logic
+// Requirement: CONV-3.2, CONV-3.3, CONV-3.4, CONV-3.6 — token budget select logic
 
-// Trim returns a subset of messages that fits within the configured token budget.
+// Select returns a subset of messages that fits within the configured token budget.
 // The system preamble (messages before the first user message) and the most recent
 // user message are always preserved. If these anchors alone exceed the budget, an
 // error is returned. Otherwise, messages between the preamble and the last user
 // message are included from newest to oldest until the budget is exhausted.
-func (m *TokenBudgetManager) Trim(_ context.Context, messages []bond.Message) ([]bond.Message, error) {
+func (m *TokenBudgetManager) Select(_ context.Context, messages []bond.Message) ([]bond.Message, error) {
 	if len(messages) == 0 {
 		return messages, nil
 	}
