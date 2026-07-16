@@ -18,13 +18,19 @@ A(nother) Go framework for building agentic applications. Bond provides the stre
 - **Provider-agnostic** — implement `bond.Agent` for any LLM (Bedrock, OpenAI, Ollama included)
 - **Hooks and plugins** for cross-cutting concerns (logging, guardrails, metrics)
 - **Orchestration patterns** — graphs (LangGraph-style) and swarms (OpenAI Swarm-style)
+- **Parallel graph nodes** — fan-out/fan-in with deterministic output ordering
+- **Map-reduce pattern** — fan out work to parallel workers with bounded concurrency
+- **Graph checkpointing** — persist execution state to any backend, resume after restart
+- **Async approval gates** — human-in-the-loop with `AsyncGate`, store-backed suspend/resume
+- **Swarm context carry-over** — `HistoryPolicy` filters what agents see on transfer
+- **Automatic summarization** — LLM-based summary of dropped context on overflow
 - **[A2A](https://google.github.io/A2A/) protocol support** — remote agent communication, tool delegation, incremental streaming
 - **Multiple runtimes** — AgentCore (AWS), generic HTTP/A2A/MCP, ACP for code editors
 - **MCP tool adapter** — use [MCP](https://modelcontextprotocol.io/) server tools in your agent
 - **MCP handler with SSE observability** — real-time lifecycle notifications during execution
 - **Tool registry** — expose large tool collections through a discovery gateway
 - **Built-in toolbox** — shell execution, file I/O, environment access
-- **Session management** — persistent history and conversation trimming (sliding window, token budget)
+- **Session management** — persistent history, conversation trimming, and summarization
 - **Zero external deps in the root** — sub-packages isolate SDK dependencies
 
 ## Install
@@ -131,7 +137,7 @@ bond.Stream(ctx, agent, msgs, bond.AgentOptions{
 
 ```
 bond/                        Core interfaces (Agent, Tool, Block, Stream, Invoke)
-bond/agent/                  Orchestration: graph, swarm, AsTool
+bond/agent/                  Orchestration: graph, swarm, AsTool, MapReduce, parallel nodes, checkpoints
 bond/provider/a2aproxy/      A2A protocol proxy (bond.Agent over remote A2A agent)
 bond/provider/acpproxy/      ACP protocol proxy (bond.Agent over ACP transport)
 bond/provider/bedrock/       Amazon Bedrock Converse streaming provider
@@ -143,9 +149,10 @@ bond/runtime/agentcore/      AWS Bedrock AgentCore defaults (ports, paths, sessi
 bond/tool/                   Tool infrastructure (schema, MCP adapter, structured output)
 bond/tool/builtin/           Built-in tools: shell, file I/O, HTTP, environment
 bond/tool/registry/          Tool discovery gateway plugin
+bond/extra/approval/         Approval gates (sync and async) with store-backed suspend/resume
 bond/extra/delegation/       A2A tool delegation (client + server)
-bond/extra/session/          Session persistence and conversation trimming
-bond/extra/session/dynamostore/  DynamoDB-backed session store
+bond/extra/session/          Session persistence, conversation trimming, and summarization
+bond/extra/store/dynamostore/    DynamoDB-backed stores (sessions, approvals, checkpoints)
 bond/bondtest/               Test utilities (deterministic agent, event helpers)
 ```
 
@@ -199,6 +206,104 @@ s.AddAgent("analyst", &agent.SwarmAgent{
 
 // The handler decides when to bring in specialists
 bond.Invoke(ctx, s, bond.TextPrompt("we need eyes inside"), bond.AgentOptions{})
+```
+
+### Parallel Nodes (Fan-Out/Fan-In)
+
+Execute multiple nodes concurrently and converge at a single join point:
+
+```go
+g := agent.NewGraph("dispatch", agent.GraphOptions{})
+
+g.AddNode("dispatch", &agent.GraphNode{Agent: dispatchAgent})
+g.AddNode("recon", &agent.GraphNode{Agent: reconAgent})
+g.AddNode("signals", &agent.GraphNode{Agent: signalsAgent})
+g.AddNode("debrief", &agent.GraphNode{Agent: debriefAgent})
+
+// recon and signals run concurrently, then converge at debrief
+g.FanOutEdge("dispatch", []string{"recon", "signals"}, "debrief")
+```
+
+### Map-Reduce (Parallel Processing)
+
+Fan out work to parallel workers with bounded concurrency:
+
+```go
+action := agent.MapReduce(agent.MapReduceOptions[string, Summary]{
+    Map: func(ctx context.Context, state agent.State) ([]string, error) {
+        docs, _ := state.Get("documents")
+        return docs.([]string), nil
+    },
+    Worker: func(ctx context.Context, doc string) (Summary, error) {
+        return summarizeDocument(ctx, doc)
+    },
+    Reduce: func(ctx context.Context, state agent.State, results []agent.MapReduceResult[Summary]) error {
+        var summaries []Summary
+        for _, r := range results {
+            if r.Err == nil {
+                summaries = append(summaries, r.Value)
+            }
+        }
+        state.Set("summaries", summaries)
+        return nil
+    },
+    MaxConcurrency: 5,
+})
+
+g.AddNode("summarize_all", &agent.GraphNode{Action: action})
+```
+
+### Checkpoint/Resume (Durability)
+
+Persist execution state after each node — resume from where you left off after restart:
+
+```go
+store := agent.NewInMemoryCheckpointStore() // or your own CheckpointStore
+
+g := agent.NewGraph("mission", agent.GraphOptions{
+    CheckpointStore: store,
+    CheckpointID:    "mission-001",
+})
+
+// ... add nodes and edges ...
+
+// Run — checkpoints saved after each node
+bond.Invoke(ctx, g, prompt, bond.AgentOptions{})
+
+// Later (after restart), resume from where we left off
+for event, err := range g.ResumeFrom(ctx, "mission-001") {
+    // continues from the last completed node
+}
+```
+
+### Async Approval Gates (Human-in-the-Loop)
+
+Gate graph transitions on external approval — suspend gracefully, resume when approved:
+
+```go
+import "github.com/nisimpson/bond/extra/approval"
+
+store := approval.NewInMemoryStore()
+
+gate := approval.NewAsyncGate(approval.AsyncGateOptions[*agent.BeforeNodeTransitionHook]{
+    Store: store,
+    KeyFunc: func(e *agent.BeforeNodeTransitionHook) string {
+        return fmt.Sprintf("%s-to-%s", e.FromNode, e.ToNode)
+    },
+})
+
+// Register on the hook registry (via plugin or directly)
+plugin := bond.NewHooksPlugin("approval", func(r *bond.HookRegistry) {
+    gate.Register(r)
+})
+
+// First run: gate fires, creates pending record, returns ErrInterrupted.
+// Graph stops gracefully, checkpoint saved.
+
+// External system approves:
+approval.ApprovePending(ctx, store, "nodeB-to-nodeC")
+
+// Resume: gate finds approved record, execution continues.
 ```
 
 ### Sub-Agent Tool (Delegation)
@@ -392,18 +497,24 @@ Keep conversations within model context limits:
 
 ```go
 // Sliding window: keep the last 10 user/assistant pairs
-mgr, _ := session.NewSlidingWindowManager(session.SlidingWindowOptions{
+policy, _ := session.NewSlidingWindowManager(session.SlidingWindowOptions{
     WindowSize: 10,
 })
 
 // Or token budget: fit within a token limit
-mgr, _ := session.NewTokenBudgetManager(session.TokenBudgetOptions{
+policy, _ := session.NewTokenBudgetManager(session.TokenBudgetOptions{
     MaxTokens: 8000,
     Counter:   myTokenCounter,
 })
 
+// Or summarize dropped messages instead of discarding them
+policy, _ = session.NewSummarizationManager(session.SummarizationManagerOptions{
+    Summarizer: mySummarizer, // LLM-based summarizer
+    Fallback:   slidingWindow, // underlying trim policy
+})
+
 trimPlugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{
-    Manager:     mgr,
+    Policy:      policy,
     AutoRecover: true, // retry on ErrContextOverflow
     MaxRetries:  2,
 })
@@ -414,6 +525,20 @@ bond.Stream(ctx, agent, msgs, bond.AgentOptions{
 ```
 
 Both strategies preserve system preamble messages and maintain relative message ordering.
+
+### Swarm Context Carry-Over
+
+Control what history agents see when transferring between swarm agents:
+
+```go
+// Only pass the last 3 exchanges to the specialist on transfer
+policy, _ := session.NewSlidingWindowManager(session.SlidingWindowOptions{WindowSize: 3})
+
+s.AddAgent("specialist", &agent.SwarmAgent{
+    Agent:         specialistAgent,
+    HistoryPolicy: policy, // receives only the last 3 exchanges
+})
+```
 
 ## Testing (Training Exercise)
 

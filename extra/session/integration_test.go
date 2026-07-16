@@ -60,7 +60,7 @@ func TestIntegration_SessionAndTrimmingPluginComposition(t *testing.T) {
 	}
 
 	trimmingPlugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{
-		Manager: mgr,
+		Policy: mgr,
 	})
 
 	// --- Register plugins in correct order (session first, trimming second) ---
@@ -154,7 +154,7 @@ func TestIntegration_PluginComposition(t *testing.T) {
 	})
 
 	mgr, _ := session.NewSlidingWindowManager(session.SlidingWindowOptions{WindowSize: 5})
-	trimmingPlugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{Manager: mgr})
+	trimmingPlugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{Policy: mgr})
 
 	sessionPlugin.Init(registry)
 	trimmingPlugin.Init(registry)
@@ -192,7 +192,7 @@ func TestIntegration_ErrContextOverflowWrapping(t *testing.T) {
 	}
 
 	plugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{
-		Manager:     mgr,
+		Policy:      mgr,
 		AutoRecover: true,
 		MaxRetries:  2,
 	})
@@ -223,6 +223,304 @@ func TestIntegration_ErrContextOverflowWrapping(t *testing.T) {
 	}
 
 	t.Log("ErrContextOverflow wrapping works correctly across package boundaries.")
+}
+
+// TestIntegration_SummarizationManagerWithTrimmingPlugin verifies that a
+// TrimmingPlugin backed by a SummarizationManager correctly summarizes dropped
+// messages and injects a synthetic summary message into the retained history.
+//
+// Scenario:
+//  1. SummarizationManager wraps a SlidingWindowManager (window=2) as fallback.
+//  2. A conversation of 6 user/assistant pairs is processed.
+//  3. The fallback drops the first 4 pairs; the Summarizer condenses them.
+//  4. The result contains the synthetic summary before the retained messages.
+//  5. On summarizer failure, graceful degradation returns just the fallback result.
+//
+// Validates: Requirements 6.*
+func TestIntegration_SummarizationManagerWithTrimmingPlugin(t *testing.T) {
+	ctx := context.Background()
+
+	// --- Build a mock summarizer that produces a known summary ---
+	summarizer := &mockSummarizer{
+		summary: bond.Message{
+			Role:    bond.RoleAssistant,
+			Content: []bond.Block{&bond.TextBlock{Text: "Summary of earlier conversation."}},
+		},
+	}
+
+	// --- Fallback: SlidingWindowManager with window size 2 ---
+	fallback, err := session.NewSlidingWindowManager(session.SlidingWindowOptions{
+		WindowSize: 2,
+	})
+	if err != nil {
+		t.Fatalf("NewSlidingWindowManager: %v", err)
+	}
+
+	// --- SummarizationManager wraps the fallback ---
+	sumMgr, err := session.NewSummarizationManager(session.SummarizationManagerOptions{
+		Summarizer: summarizer,
+		Fallback:   fallback,
+	})
+	if err != nil {
+		t.Fatalf("NewSummarizationManager: %v", err)
+	}
+
+	// --- TrimmingPlugin uses SummarizationManager as its policy ---
+	plugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{
+		Policy:      sumMgr,
+		AutoRecover: true,
+		MaxRetries:  2,
+	})
+
+	// --- Build a conversation with 6 user/assistant pairs ---
+	messages := make([]bond.Message, 0, 12)
+	for i := 1; i <= 6; i++ {
+		messages = append(messages,
+			bond.Message{
+				Role:    bond.RoleUser,
+				Content: []bond.Block{&bond.TextBlock{Text: fmt.Sprintf("user %d", i)}},
+			},
+			bond.Message{
+				Role:    bond.RoleAssistant,
+				Content: []bond.Block{&bond.TextBlock{Text: fmt.Sprintf("assistant %d", i)}},
+			},
+		)
+	}
+
+	// --- Exercise via hook registration (TrimmingPlugin.Init) ---
+	registry := &bond.HookRegistry{}
+	plugin.Init(registry)
+
+	modelHook := &bond.BeforeModelInvokeHook{Messages: messages}
+	if err := registry.Notify(ctx, modelHook); err != nil {
+		t.Fatalf("BeforeModelInvokeHook: %v", err)
+	}
+
+	trimmed := modelHook.Messages
+
+	// Verify: the total should be less than original 12
+	if len(trimmed) >= 12 {
+		t.Fatalf("expected trimmed output < 12 messages, got %d", len(trimmed))
+	}
+
+	// Verify: a synthetic summary message exists with metadata
+	var foundSynthetic bool
+	var syntheticIdx int
+	for i, msg := range trimmed {
+		if msg.Metadata != nil {
+			if v, ok := msg.Metadata["bond:synthetic"]; ok && v == true {
+				foundSynthetic = true
+				syntheticIdx = i
+				break
+			}
+		}
+	}
+	if !foundSynthetic {
+		t.Fatal("expected a synthetic summary message with Metadata[\"bond:synthetic\"] == true")
+	}
+
+	// Verify: the summary message content matches our mock summarizer output
+	summaryBlock, ok := trimmed[syntheticIdx].Content[0].(*bond.TextBlock)
+	if !ok || summaryBlock.Text != "Summary of earlier conversation." {
+		t.Errorf("expected summary text 'Summary of earlier conversation.', got %v", trimmed[syntheticIdx].Content)
+	}
+
+	// Verify: summary appears before the retained user messages
+	// (since there's no preamble, syntheticIdx should be 0)
+	if syntheticIdx != 0 {
+		t.Errorf("expected summary at index 0 (no preamble), got index %d", syntheticIdx)
+	}
+
+	// Verify: retained messages follow the summary
+	// With window=2, we expect the last 2 user msgs ("user 5", "user 6") and their replies.
+	var retainedUsers []string
+	for _, msg := range trimmed[syntheticIdx+1:] {
+		if msg.Role == bond.RoleUser {
+			if tb, ok := msg.Content[0].(*bond.TextBlock); ok {
+				retainedUsers = append(retainedUsers, tb.Text)
+			}
+		}
+	}
+	if len(retainedUsers) != 2 {
+		t.Fatalf("expected 2 retained user messages, got %d: %v", len(retainedUsers), retainedUsers)
+	}
+	if retainedUsers[0] != "user 5" || retainedUsers[1] != "user 6" {
+		t.Errorf("expected retained users [user 5, user 6], got %v", retainedUsers)
+	}
+
+	// Verify: the summarizer was called with the dropped messages
+	if summarizer.callCount != 1 {
+		t.Errorf("expected summarizer to be called once, got %d", summarizer.callCount)
+	}
+	if len(summarizer.lastInput) != 8 {
+		// 4 dropped pairs = 8 messages
+		t.Errorf("expected summarizer input of 8 messages (4 dropped pairs), got %d", len(summarizer.lastInput))
+	}
+
+	t.Logf("Integration: 12 messages → %d after summarization (window=2)", len(trimmed))
+}
+
+// TestIntegration_SummarizationManagerGracefulDegradation verifies that when
+// the Summarizer fails, the SummarizationManager returns the fallback result
+// without a summary — no synthetic message should appear.
+//
+// Validates: Requirements 6.6
+func TestIntegration_SummarizationManagerGracefulDegradation(t *testing.T) {
+	ctx := context.Background()
+
+	// Failing summarizer
+	failingSummarizer := &mockSummarizer{
+		err: errors.New("LLM unavailable"),
+	}
+
+	fallback, err := session.NewSlidingWindowManager(session.SlidingWindowOptions{
+		WindowSize: 2,
+	})
+	if err != nil {
+		t.Fatalf("NewSlidingWindowManager: %v", err)
+	}
+
+	sumMgr, err := session.NewSummarizationManager(session.SummarizationManagerOptions{
+		Summarizer: failingSummarizer,
+		Fallback:   fallback,
+	})
+	if err != nil {
+		t.Fatalf("NewSummarizationManager: %v", err)
+	}
+
+	// Build 6 user/assistant pairs.
+	messages := make([]bond.Message, 0, 12)
+	for i := 1; i <= 6; i++ {
+		messages = append(messages,
+			bond.Message{
+				Role:    bond.RoleUser,
+				Content: []bond.Block{&bond.TextBlock{Text: fmt.Sprintf("user %d", i)}},
+			},
+			bond.Message{
+				Role:    bond.RoleAssistant,
+				Content: []bond.Block{&bond.TextBlock{Text: fmt.Sprintf("assistant %d", i)}},
+			},
+		)
+	}
+
+	// Call Select directly on the SummarizationManager.
+	result, err := sumMgr.Select(ctx, messages)
+	if err != nil {
+		t.Fatalf("Select returned error: %v", err)
+	}
+
+	// Should return fallback result (last 2 pairs = 4 messages).
+	if len(result) != 4 {
+		t.Fatalf("expected 4 messages from fallback, got %d", len(result))
+	}
+
+	// No synthetic message should be present.
+	for _, msg := range result {
+		if msg.Metadata != nil {
+			if v, ok := msg.Metadata["bond:synthetic"]; ok && v == true {
+				t.Fatal("unexpected synthetic message in degraded result")
+			}
+		}
+	}
+
+	t.Log("Graceful degradation: summarizer failure returns fallback result only.")
+}
+
+// TestIntegration_SummarizationManagerWithPreamble verifies that when a system
+// preamble exists, the summary is placed after the preamble and before retained
+// messages.
+//
+// Validates: Requirements 6.5
+func TestIntegration_SummarizationManagerWithPreamble(t *testing.T) {
+	ctx := context.Background()
+
+	summarizer := &mockSummarizer{
+		summary: bond.Message{
+			Role:    bond.RoleAssistant,
+			Content: []bond.Block{&bond.TextBlock{Text: "Context summary."}},
+		},
+	}
+
+	fallback, err := session.NewSlidingWindowManager(session.SlidingWindowOptions{
+		WindowSize: 1,
+	})
+	if err != nil {
+		t.Fatalf("NewSlidingWindowManager: %v", err)
+	}
+
+	sumMgr, err := session.NewSummarizationManager(session.SummarizationManagerOptions{
+		Summarizer: summarizer,
+		Fallback:   fallback,
+	})
+	if err != nil {
+		t.Fatalf("NewSummarizationManager: %v", err)
+	}
+
+	// Build a conversation with a system-like preamble (assistant message before
+	// the first user message).
+	messages := []bond.Message{
+		{Role: bond.RoleAssistant, Content: []bond.Block{&bond.TextBlock{Text: "system preamble"}}},
+		{Role: bond.RoleUser, Content: []bond.Block{&bond.TextBlock{Text: "user 1"}}},
+		{Role: bond.RoleAssistant, Content: []bond.Block{&bond.TextBlock{Text: "assistant 1"}}},
+		{Role: bond.RoleUser, Content: []bond.Block{&bond.TextBlock{Text: "user 2"}}},
+		{Role: bond.RoleAssistant, Content: []bond.Block{&bond.TextBlock{Text: "assistant 2"}}},
+		{Role: bond.RoleUser, Content: []bond.Block{&bond.TextBlock{Text: "user 3"}}},
+		{Role: bond.RoleAssistant, Content: []bond.Block{&bond.TextBlock{Text: "assistant 3"}}},
+	}
+
+	result, err := sumMgr.Select(ctx, messages)
+	if err != nil {
+		t.Fatalf("Select: %v", err)
+	}
+
+	// Expect: preamble + summary + last 1 pair (user 3, assistant 3)
+	// The fallback (window=1) retains preamble + last pair.
+	// SummarizationManager inserts summary between preamble and retained user messages.
+
+	// Find the preamble in result (everything before first user message).
+	var firstUserIdx int
+	for i, msg := range result {
+		if msg.Role == bond.RoleUser {
+			firstUserIdx = i
+			break
+		}
+	}
+
+	// The synthetic summary should be just before the first user message.
+	if firstUserIdx < 2 {
+		t.Fatalf("expected preamble + summary before first user, firstUserIdx=%d, result=%d msgs", firstUserIdx, len(result))
+	}
+
+	syntheticMsg := result[firstUserIdx-1]
+	if syntheticMsg.Metadata == nil || syntheticMsg.Metadata["bond:synthetic"] != true {
+		t.Fatal("expected synthetic summary message just before retained user messages")
+	}
+
+	// Preamble should be first.
+	preambleBlock, ok := result[0].Content[0].(*bond.TextBlock)
+	if !ok || preambleBlock.Text != "system preamble" {
+		t.Errorf("expected preamble at index 0, got %v", result[0])
+	}
+
+	t.Logf("Preamble test: result has %d messages, preamble at 0, summary at %d, user at %d",
+		len(result), firstUserIdx-1, firstUserIdx)
+}
+
+// mockSummarizer is a test helper that returns a preconfigured summary or error.
+type mockSummarizer struct {
+	summary   bond.Message
+	err       error
+	callCount int
+	lastInput []bond.Message
+}
+
+func (m *mockSummarizer) Summarize(_ context.Context, messages []bond.Message) (bond.Message, error) {
+	m.callCount++
+	m.lastInput = messages
+	if m.err != nil {
+		return bond.Message{}, m.err
+	}
+	return m.summary, nil
 }
 
 // TestIntegration_HookOrdering verifies that hook registration order determines
@@ -258,7 +556,7 @@ func TestIntegration_HookOrdering(t *testing.T) {
 
 	// Register TrimmingPlugin.
 	mgr, _ := session.NewSlidingWindowManager(session.SlidingWindowOptions{WindowSize: 10})
-	trimmingPlugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{Manager: mgr})
+	trimmingPlugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{Policy: mgr})
 	trimmingPlugin.Init(registry)
 
 	// Register a tracking hook for BeforeModelInvokeHook after the plugins.

@@ -240,7 +240,7 @@ func TestProperty_DynamoDBErrorWrapping(t *testing.T) {
 		originalErr := fmt.Errorf("simulated DynamoDB error: %s", randomASCII(r, 20))
 
 		client := &errClient{err: originalErr}
-		store := New(Options{
+		store := NewSessionStore(Options{
 			Client:    client,
 			TableName: "test-table",
 		})

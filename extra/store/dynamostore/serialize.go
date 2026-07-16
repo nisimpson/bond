@@ -6,17 +6,13 @@ import (
 	"github.com/nisimpson/bond"
 )
 
-// Requirement: CONV-8.5 — Message serialization helpers for DynamoDB storage.
-// Handles TextBlock, ToolUseBlock, ToolResultBlock serialization.
-// Omits MediaBlock with io.Reader sources; persists only SourceURI-based media.
-
-// serializedMessage is the JSON representation of a bond.Message for DynamoDB storage.
+// serializedMessage is the JSON representation of a [bond.Message] for DynamoDB storage.
 type serializedMessage struct {
 	Role    string            `json:"role"`
 	Content []serializedBlock `json:"content"`
 }
 
-// serializedBlock is the JSON representation of a bond.Block for DynamoDB storage.
+// serializedBlock is the JSON representation of a [bond.Block] for DynamoDB storage.
 type serializedBlock struct {
 	Type string          `json:"type"`
 	Data json.RawMessage `json:"data"`
@@ -70,7 +66,7 @@ func serializeMessages(messages []bond.Message) ([]byte, error) {
 	return json.Marshal(serialized)
 }
 
-// serializeBlock converts a single bond.Block to its serialized form.
+// serializeBlock converts a single [bond.Block] to its serialized form.
 // Returns nil for blocks that cannot be serialized (e.g., MediaBlock with io.Reader).
 func serializeBlock(block bond.Block) (*serializedBlock, error) {
 	switch b := block.(type) {
@@ -161,7 +157,7 @@ func deserializeMessages(data []byte) ([]bond.Message, error) {
 	return messages, nil
 }
 
-// deserializeBlock converts a serialized block back to a bond.Block.
+// deserializeBlock converts a serialized block back to a [bond.Block].
 func deserializeBlock(sb serializedBlock) (bond.Block, error) {
 	switch sb.Type {
 	case "text":

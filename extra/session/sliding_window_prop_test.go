@@ -82,9 +82,9 @@ func TestProperty_SlidingWindowBoundsOutputToNPairs(t *testing.T) {
 			return false
 		}
 
-		result, err := mgr.Trim(context.Background(), messages)
+		result, err := mgr.Select(context.Background(), messages)
 		if err != nil {
-			t.Logf("unexpected Trim error: %v", err)
+			t.Logf("unexpected Select error: %v", err)
 			return false
 		}
 
@@ -165,9 +165,9 @@ func TestProperty_SlidingWindowPreservesSystemPreamble(t *testing.T) {
 			return false
 		}
 
-		result, err := mgr.Trim(context.Background(), messages)
+		result, err := mgr.Select(context.Background(), messages)
 		if err != nil {
-			t.Logf("unexpected Trim error: %v", err)
+			t.Logf("unexpected Select error: %v", err)
 			return false
 		}
 
