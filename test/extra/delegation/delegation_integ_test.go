@@ -1,4 +1,4 @@
-package delegation
+package delegation_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/nisimpson/bond"
 	"github.com/nisimpson/bond/bondtest"
+	"github.com/nisimpson/bond/extra/delegation"
 )
 
 // TestIntegration_DelegatedToolViaBondStream tests the full delegation flow
@@ -22,10 +23,10 @@ func TestIntegration_DelegatedToolViaBondStream(t *testing.T) {
 	// --- Caller side setup ---
 
 	// Caller has a "search" tool that returns results based on query.
-	searchTool := &fakeTool{
-		name: "search",
-		desc: "Search the web for information",
-		runFn: func(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
+	searchTool := &bondtest.FakeTool{
+		ToolName: "search",
+		ToolDesc: "Search the web for information",
+		RunFn: func(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
 			var params struct {
 				Query string `json:"query"`
 			}
@@ -37,19 +38,19 @@ func TestIntegration_DelegatedToolViaBondStream(t *testing.T) {
 	}
 
 	// Caller builds a fulfiller from its tools.
-	fulfiller := newFulfiller(searchTool)
+	fulfiller := delegation.NewFulfiller(searchTool)
 
 	// Caller extracts skills for the target.
-	skills := skillsFromTools([]bond.Tool{searchTool})
+	skills := delegation.SkillsFromTools([]bond.Tool{searchTool})
 
 	// --- Target side setup ---
 
 	// In-process requester: when the target's proxy tool is called,
 	// it delegates directly to the caller's fulfiller.
-	requester := &inProcessRequester{fulfiller: fulfiller}
+	requester := &InProcessRequester{Fulfiller: fulfiller}
 
 	// Target creates the delegation plugin with caller's skills.
-	delegationPlugin := NewPlugin(Options{
+	delegationPlugin := delegation.NewPlugin(delegation.Options{
 		Requester: requester,
 		Skills:    skills,
 	})
@@ -143,26 +144,26 @@ func TestIntegration_MultipleDelegatedTools(t *testing.T) {
 	ctx := context.Background()
 
 	// Caller has two tools.
-	searchTool := &fakeTool{
-		name: "search",
-		desc: "Search",
-		runFn: func(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
+	searchTool := &bondtest.FakeTool{
+		ToolName: "search",
+		ToolDesc: "Search",
+		RunFn: func(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
 			return []bond.Block{&bond.TextBlock{Text: "search-result"}}, nil
 		},
 	}
-	calcTool := &fakeTool{
-		name: "calc",
-		desc: "Calculator",
-		runFn: func(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
+	calcTool := &bondtest.FakeTool{
+		ToolName: "calc",
+		ToolDesc: "Calculator",
+		RunFn: func(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
 			return []bond.Block{&bond.TextBlock{Text: "calc-result"}}, nil
 		},
 	}
 
-	fulfiller := newFulfiller(searchTool, calcTool)
-	skills := skillsFromTools([]bond.Tool{searchTool, calcTool})
-	requester := &inProcessRequester{fulfiller: fulfiller}
+	fulfiller := delegation.NewFulfiller(searchTool, calcTool)
+	skills := delegation.SkillsFromTools([]bond.Tool{searchTool, calcTool})
+	requester := &InProcessRequester{Fulfiller: fulfiller}
 
-	plugin := NewPlugin(Options{
+	plugin := delegation.NewPlugin(delegation.Options{
 		Requester: requester,
 		Skills:    skills,
 	})
@@ -250,19 +251,19 @@ func TestIntegration_DelegatedToolError(t *testing.T) {
 	ctx := context.Background()
 
 	// Caller has a tool that always fails.
-	failTool := &fakeTool{
-		name: "fail",
-		desc: "Always fails",
-		runFn: func(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
+	failTool := &bondtest.FakeTool{
+		ToolName: "fail",
+		ToolDesc: "Always fails",
+		RunFn: func(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
 			return nil, errors.New("tool exploded")
 		},
 	}
 
-	fulfiller := newFulfiller(failTool)
-	skills := skillsFromTools([]bond.Tool{failTool})
-	requester := &inProcessRequester{fulfiller: fulfiller}
+	fulfiller := delegation.NewFulfiller(failTool)
+	skills := delegation.SkillsFromTools([]bond.Tool{failTool})
+	requester := &InProcessRequester{Fulfiller: fulfiller}
 
-	plugin := NewPlugin(Options{
+	plugin := delegation.NewPlugin(delegation.Options{
 		Requester: requester,
 		Skills:    skills,
 	})

@@ -124,7 +124,7 @@ func TestSwarm_HistoryPolicy_Integration(t *testing.T) {
 	// The last message in the specialist's view should include the dispatcher's
 	// assistant output, confirming the swarm accumulated it into internal history
 	// before applying the filter.
-	lastSpecialistMsg := textFromBlock(specialist.received[len(specialist.received)-1])
+	lastSpecialistMsg := bondtest.TextFromBlock(specialist.received[len(specialist.received)-1])
 	if lastSpecialistMsg != "dispatching nowdispatcher done" {
 		t.Errorf("expected specialist's last message to be dispatcher output, got %q", lastSpecialistMsg)
 	}
@@ -134,7 +134,7 @@ func TestSwarm_HistoryPolicy_Integration(t *testing.T) {
 	firstUserMsg := ""
 	for _, msg := range specialist.received {
 		if msg.Role == bond.RoleUser {
-			firstUserMsg = textFromBlock(msg)
+			firstUserMsg = bondtest.TextFromBlock(msg)
 			break
 		}
 	}

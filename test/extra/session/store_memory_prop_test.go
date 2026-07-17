@@ -1,4 +1,4 @@
-package session
+package session_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"testing/quick"
 
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/extra/session"
 )
 
 // randomRole returns a random message role.
@@ -117,7 +118,7 @@ func messagesEqual(a, b []bond.Message) bool {
 func TestProperty_SessionStoreSaveLoadRoundTrip(t *testing.T) {
 	f := func(seed int64) bool {
 		r := rand.New(rand.NewSource(seed))
-		store := NewInMemoryStore()
+		store := session.NewInMemoryStore()
 		ctx := context.Background()
 
 		sessionID := randomSessionID(r)
@@ -152,7 +153,7 @@ func TestProperty_SessionStoreSaveLoadRoundTrip(t *testing.T) {
 func TestProperty_InMemoryStoreIsolationFromCallerMutation(t *testing.T) {
 	f := func(seed int64) bool {
 		r := rand.New(rand.NewSource(seed))
-		store := NewInMemoryStore()
+		store := session.NewInMemoryStore()
 		ctx := context.Background()
 
 		sessionID := randomSessionID(r)
@@ -209,7 +210,7 @@ func TestProperty_InMemoryStoreConcurrentAccessSafety(t *testing.T) {
 
 	f := func(seed int64) bool {
 		r := rand.New(rand.NewSource(seed))
-		store := NewInMemoryStore()
+		store := session.NewInMemoryStore()
 		ctx := context.Background()
 
 		// Generate a pool of session IDs and messages for concurrent use.

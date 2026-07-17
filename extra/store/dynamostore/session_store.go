@@ -63,7 +63,7 @@ func (s *SessionStore) Load(ctx context.Context, sessionID string) ([]bond.Messa
 		return []bond.Message{}, nil
 	}
 
-	messages, err := deserializeMessages(bAttr.Value)
+	messages, err := DeserializeMessages(bAttr.Value)
 	if err != nil {
 		return nil, fmt.Errorf("dynamostore: load session %q: %w", sessionID, err)
 	}
@@ -73,7 +73,7 @@ func (s *SessionStore) Load(ctx context.Context, sessionID string) ([]bond.Messa
 
 // Save persists the message slice for the given session, overwriting any previous data.
 func (s *SessionStore) Save(ctx context.Context, sessionID string, messages []bond.Message) error {
-	data, err := serializeMessages(messages)
+	data, err := SerializeMessages(messages)
 	if err != nil {
 		return fmt.Errorf("dynamostore: save session %q: %w", sessionID, err)
 	}

@@ -1,4 +1,4 @@
-package session
+package session_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"testing/quick"
 
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/extra/session"
 )
 
 // Feature: conversation-session-management, Property 1: Trim preserves message ordering
@@ -23,7 +24,7 @@ func TestProperty_TrimPreservesMessageOrdering(t *testing.T) {
 
 		windowSize := 1 + rng.Intn(10)
 
-		mgr, err := NewSlidingWindowManager(SlidingWindowOptions{WindowSize: windowSize})
+		mgr, err := session.NewSlidingWindowManager(session.SlidingWindowOptions{WindowSize: windowSize})
 		if err != nil {
 			t.Logf("unexpected constructor error: %v", err)
 			return false
@@ -73,13 +74,13 @@ func TestProperty_TrimmingPluginHookAppliesTrimResult(t *testing.T) {
 
 		windowSize := 1 + rng.Intn(5)
 
-		mgr, err := NewSlidingWindowManager(SlidingWindowOptions{WindowSize: windowSize})
+		mgr, err := session.NewSlidingWindowManager(session.SlidingWindowOptions{WindowSize: windowSize})
 		if err != nil {
 			t.Logf("unexpected constructor error: %v", err)
 			return false
 		}
 
-		plugin := NewTrimmingPlugin(TrimmingPluginOptions{
+		plugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{
 			Policy: mgr,
 		})
 
@@ -136,7 +137,7 @@ func TestProperty_TrimmingPluginHookReturnsTrimError(t *testing.T) {
 		expectedErr := fmt.Errorf("trim failed: %s", randomASCII(rng, 10))
 		mgr := &failingPolicy{err: expectedErr}
 
-		plugin := NewTrimmingPlugin(TrimmingPluginOptions{
+		plugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{
 			Policy: mgr,
 		})
 
@@ -177,13 +178,13 @@ func TestProperty_AutoRecoveryRetryIsBounded(t *testing.T) {
 		maxRetries := 1 + rng.Intn(5)
 		windowSize := 1 + rng.Intn(5)
 
-		mgr, err := NewSlidingWindowManager(SlidingWindowOptions{WindowSize: windowSize})
+		mgr, err := session.NewSlidingWindowManager(session.SlidingWindowOptions{WindowSize: windowSize})
 		if err != nil {
 			t.Logf("unexpected constructor error: %v", err)
 			return false
 		}
 
-		plugin := NewTrimmingPlugin(TrimmingPluginOptions{
+		plugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{
 			Policy:      mgr,
 			AutoRecover: true,
 			MaxRetries:  maxRetries,
@@ -234,13 +235,13 @@ func TestProperty_RecoverRejectsNonOverflowErrors(t *testing.T) {
 		messages := generateConversationPairs(rng)
 		windowSize := 1 + rng.Intn(5)
 
-		mgr, err := NewSlidingWindowManager(SlidingWindowOptions{WindowSize: windowSize})
+		mgr, err := session.NewSlidingWindowManager(session.SlidingWindowOptions{WindowSize: windowSize})
 		if err != nil {
 			t.Logf("unexpected constructor error: %v", err)
 			return false
 		}
 
-		plugin := NewTrimmingPlugin(TrimmingPluginOptions{
+		plugin := session.NewTrimmingPlugin(session.TrimmingPluginOptions{
 			Policy:      mgr,
 			AutoRecover: true,
 			MaxRetries:  3,

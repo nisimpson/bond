@@ -1,4 +1,4 @@
-package dynamostore
+package dynamostore_test
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/extra/store/dynamostore"
 )
 
 // --- Generators ---
@@ -130,14 +131,14 @@ func TestProperty_DynamoDBSerializationRoundTrip(t *testing.T) {
 		messages := randomMessages(r, 10)
 
 		// Serialize
-		data, err := serializeMessages(messages)
+		data, err := dynamostore.SerializeMessages(messages)
 		if err != nil {
 			t.Logf("serializeMessages failed: %v", err)
 			return false
 		}
 
 		// Deserialize
-		restored, err := deserializeMessages(data)
+		restored, err := dynamostore.DeserializeMessages(data)
 		if err != nil {
 			t.Logf("deserializeMessages failed: %v", err)
 			return false
@@ -203,14 +204,14 @@ func TestProperty_DynamoDBSerializationRoundTripWithMediaURI(t *testing.T) {
 		}
 
 		// Serialize
-		data, err := serializeMessages(msgs)
+		data, err := dynamostore.SerializeMessages(msgs)
 		if err != nil {
 			t.Logf("serializeMessages failed: %v", err)
 			return false
 		}
 
 		// Deserialize
-		restored, err := deserializeMessages(data)
+		restored, err := dynamostore.DeserializeMessages(data)
 		if err != nil {
 			t.Logf("deserializeMessages failed: %v", err)
 			return false
@@ -240,7 +241,7 @@ func TestProperty_DynamoDBErrorWrapping(t *testing.T) {
 		originalErr := fmt.Errorf("simulated DynamoDB error: %s", randomASCII(r, 20))
 
 		client := &errClient{err: originalErr}
-		store := NewSessionStore(Options{
+		store := dynamostore.NewSessionStore(dynamostore.Options{
 			Client:    client,
 			TableName: "test-table",
 		})

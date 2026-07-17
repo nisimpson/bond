@@ -1,4 +1,4 @@
-package session
+package session_test
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"testing/quick"
 
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/extra/session"
 )
 
 // errorStore is a mock store that always returns an error on Load.
@@ -28,7 +29,7 @@ func (s *errorStore) Save(_ context.Context, _ string, _ []bond.Message) error {
 func TestProperty_SessionPluginPrependsLoadedHistory(t *testing.T) {
 	f := func(seed int64) bool {
 		r := rand.New(rand.NewSource(seed))
-		store := NewInMemoryStore()
+		store := session.NewInMemoryStore()
 		ctx := context.Background()
 
 		sessionID := randomSessionID(r)
@@ -44,7 +45,7 @@ func TestProperty_SessionPluginPrependsLoadedHistory(t *testing.T) {
 		prompt := randomMessages(r, 3)
 
 		// Create plugin with a fixed resolver.
-		plugin := NewSessionPlugin(SessionPluginOptions{
+		plugin := session.NewSessionPlugin(session.SessionPluginOptions{
 			Store: store,
 			ResolveID: func(_ context.Context) (string, error) {
 				return sessionID, nil
@@ -87,7 +88,7 @@ func TestProperty_SessionPluginPrependsLoadedHistory(t *testing.T) {
 func TestProperty_SessionPluginSavesOnMessageAppend(t *testing.T) {
 	f := func(seed int64) bool {
 		r := rand.New(rand.NewSource(seed))
-		store := NewInMemoryStore()
+		store := session.NewInMemoryStore()
 		ctx := context.Background()
 
 		sessionID := randomSessionID(r)
@@ -96,7 +97,7 @@ func TestProperty_SessionPluginSavesOnMessageAppend(t *testing.T) {
 		prompt := randomMessages(r, 3)
 
 		// Create plugin with a fixed resolver.
-		plugin := NewSessionPlugin(SessionPluginOptions{
+		plugin := session.NewSessionPlugin(session.SessionPluginOptions{
 			Store: store,
 			ResolveID: func(_ context.Context) (string, error) {
 				return sessionID, nil
@@ -162,7 +163,7 @@ func TestProperty_SessionPluginLoadErrorAbortsStream(t *testing.T) {
 		loadErr := errors.New(errMsg)
 
 		// Create plugin with the error store.
-		plugin := NewSessionPlugin(SessionPluginOptions{
+		plugin := session.NewSessionPlugin(session.SessionPluginOptions{
 			Store: &errorStore{loadErr: loadErr},
 			ResolveID: func(_ context.Context) (string, error) {
 				return randomSessionID(r), nil
