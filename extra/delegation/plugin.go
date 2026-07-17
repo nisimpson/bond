@@ -97,7 +97,7 @@ func (t *proxyTool) Run(ctx context.Context, input json.RawMessage) ([]bond.Bloc
 
 // SkillsFromTools extracts Skills from bond tools for advertisement to
 // server agents (via agent card, message metadata, etc.).
-func skillsFromTools(tools []bond.Tool) []Skill {
+func SkillsFromTools(tools []bond.Tool) []Skill {
 	skills := make([]Skill, len(tools))
 	for i, t := range tools {
 		skills[i] = Skill{
@@ -109,26 +109,26 @@ func skillsFromTools(tools []bond.Tool) []Skill {
 	return skills
 }
 
-// fulfiller handles incoming "input required" delegation requests by
+// Fulfiller handles incoming "input required" delegation requests by
 // executing the corresponding local tool.
-type fulfiller struct {
+type Fulfiller struct {
 	mu    sync.RWMutex
 	tools map[string]bond.Tool
 }
 
-// newFulfiller creates a fulfiller with the given tools available for
+// NewFulfiller creates a Fulfiller with the given tools available for
 // delegation fulfillment.
-func newFulfiller(tools ...bond.Tool) *fulfiller {
+func NewFulfiller(tools ...bond.Tool) *Fulfiller {
 	m := make(map[string]bond.Tool, len(tools))
 	for _, t := range tools {
 		m[t.Name()] = t
 	}
-	return &fulfiller{tools: m}
+	return &Fulfiller{tools: m}
 }
 
 // Execute handles an incoming delegation request by running the named tool
 // with the provided input. Returns the tool's result blocks.
-func (f *fulfiller) Execute(ctx context.Context, toolName string, input json.RawMessage) ([]bond.Block, error) {
+func (f *Fulfiller) Execute(ctx context.Context, toolName string, input json.RawMessage) ([]bond.Block, error) {
 	f.mu.RLock()
 	tool, exists := f.tools[toolName]
 	f.mu.RUnlock()

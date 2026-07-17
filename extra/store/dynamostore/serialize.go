@@ -44,8 +44,8 @@ type mediaBlockData struct {
 	SourceURI string `json:"source_uri"`
 }
 
-// serializeMessages converts a message slice to JSON bytes for DynamoDB storage.
-func serializeMessages(messages []bond.Message) ([]byte, error) {
+// SerializeMessages converts a message slice to JSON bytes for DynamoDB storage.
+func SerializeMessages(messages []bond.Message) ([]byte, error) {
 	serialized := make([]serializedMessage, len(messages))
 	for i, msg := range messages {
 		sm := serializedMessage{
@@ -53,7 +53,7 @@ func serializeMessages(messages []bond.Message) ([]byte, error) {
 			Content: make([]serializedBlock, 0, len(msg.Content)),
 		}
 		for _, block := range msg.Content {
-			sb, err := serializeBlock(block)
+			sb, err := SerializeBlock(block)
 			if err != nil {
 				return nil, err
 			}
@@ -66,9 +66,9 @@ func serializeMessages(messages []bond.Message) ([]byte, error) {
 	return json.Marshal(serialized)
 }
 
-// serializeBlock converts a single [bond.Block] to its serialized form.
+// SerializeBlock converts a single [bond.Block] to its serialized form.
 // Returns nil for blocks that cannot be serialized (e.g., MediaBlock with io.Reader).
-func serializeBlock(block bond.Block) (*serializedBlock, error) {
+func SerializeBlock(block bond.Block) (*serializedBlock, error) {
 	switch b := block.(type) {
 	case *bond.TextBlock:
 		data, err := json.Marshal(textBlockData{Text: b.Text})
@@ -91,7 +91,7 @@ func serializeBlock(block bond.Block) (*serializedBlock, error) {
 	case *bond.ToolResultBlock:
 		contentBlocks := make([]serializedBlock, 0, len(b.Content))
 		for _, inner := range b.Content {
-			sb, err := serializeBlock(inner)
+			sb, err := SerializeBlock(inner)
 			if err != nil {
 				return nil, err
 			}
@@ -130,8 +130,8 @@ func serializeBlock(block bond.Block) (*serializedBlock, error) {
 	}
 }
 
-// deserializeMessages converts JSON bytes back to a message slice.
-func deserializeMessages(data []byte) ([]bond.Message, error) {
+// DeserializeMessages converts JSON bytes back to a message slice.
+func DeserializeMessages(data []byte) ([]bond.Message, error) {
 	var serialized []serializedMessage
 	if err := json.Unmarshal(data, &serialized); err != nil {
 		return nil, err

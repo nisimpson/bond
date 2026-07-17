@@ -1,4 +1,4 @@
-package session
+package session_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing/quick"
 
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/extra/session"
 )
 
 // charCounter counts characters in all TextBlock content across messages.
@@ -53,7 +54,7 @@ func TestProperty_TokenBudgetOutputFitsWithinBudget(t *testing.T) {
 		// Pick a budget that is at least enough for the anchors plus some extra
 		budget := anchorCost + 1 + rng.Intn(100)
 
-		mgr, err := NewTokenBudgetManager(TokenBudgetOptions{
+		mgr, err := session.NewTokenBudgetManager(session.TokenBudgetOptions{
 			MaxTokens: budget,
 			Counter:   charCounter,
 		})
@@ -122,7 +123,7 @@ func TestProperty_TokenBudgetPreservesPreambleAndLastUserMessage(t *testing.T) {
 		// Budget is large enough for anchors plus some room
 		budget := anchorCost + 1 + rng.Intn(50)
 
-		mgr, err := NewTokenBudgetManager(TokenBudgetOptions{
+		mgr, err := session.NewTokenBudgetManager(session.TokenBudgetOptions{
 			MaxTokens: budget,
 			Counter:   charCounter,
 		})
@@ -215,7 +216,7 @@ func TestProperty_TokenBudgetInsufficientBudgetReturnsError(t *testing.T) {
 		}
 		budget := 1 + rng.Intn(anchorCost-1) // budget in [1, anchorCost-1]
 
-		mgr, err := NewTokenBudgetManager(TokenBudgetOptions{
+		mgr, err := session.NewTokenBudgetManager(session.TokenBudgetOptions{
 			MaxTokens: budget,
 			Counter:   charCounter,
 		})

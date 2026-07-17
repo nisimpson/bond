@@ -1,4 +1,4 @@
-package session
+package session_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing/quick"
 
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/extra/session"
 )
 
 // generatePreamble creates 0-3 assistant messages to serve as a system preamble.
@@ -76,7 +77,7 @@ func TestProperty_SlidingWindowBoundsOutputToNPairs(t *testing.T) {
 
 		windowSize := 1 + rng.Intn(10)
 
-		mgr, err := NewSlidingWindowManager(SlidingWindowOptions{WindowSize: windowSize})
+		mgr, err := session.NewSlidingWindowManager(session.SlidingWindowOptions{WindowSize: windowSize})
 		if err != nil {
 			t.Logf("unexpected constructor error: %v", err)
 			return false
@@ -159,7 +160,7 @@ func TestProperty_SlidingWindowPreservesSystemPreamble(t *testing.T) {
 		// Use a small window to force trimming
 		windowSize := 1 + rng.Intn(3)
 
-		mgr, err := NewSlidingWindowManager(SlidingWindowOptions{WindowSize: windowSize})
+		mgr, err := session.NewSlidingWindowManager(session.SlidingWindowOptions{WindowSize: windowSize})
 		if err != nil {
 			t.Logf("unexpected constructor error: %v", err)
 			return false
@@ -207,7 +208,7 @@ func TestProperty_InvalidWindowSizeRejectsAtConstruction(t *testing.T) {
 		}
 		// n is now <= 0
 
-		_, err := NewSlidingWindowManager(SlidingWindowOptions{WindowSize: n})
+		_, err := session.NewSlidingWindowManager(session.SlidingWindowOptions{WindowSize: n})
 		if err == nil {
 			t.Logf("expected error for window size %d, got nil", n)
 			return false

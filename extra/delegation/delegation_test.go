@@ -7,17 +7,18 @@ import (
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/nisimpson/bond"
+	"github.com/nisimpson/bond/bondtest"
 )
 
 // --- Unit Tests ---
 
 func TestSkillsFromTools(t *testing.T) {
 	tools := []bond.Tool{
-		&fakeTool{name: "search", desc: "Search the web"},
-		&fakeTool{name: "calc", desc: "Calculator"},
+		&bondtest.FakeTool{ToolName: "search", ToolDesc: "Search the web"},
+		&bondtest.FakeTool{ToolName: "calc", ToolDesc: "Calculator"},
 	}
 
-	skills := skillsFromTools(tools)
+	skills := SkillsFromTools(tools)
 
 	if len(skills) != 2 {
 		t.Fatalf("expected 2 skills, got %d", len(skills))
@@ -88,15 +89,15 @@ func TestExtractSkills_NoMetadata(t *testing.T) {
 }
 
 func TestFulfiller_Execute(t *testing.T) {
-	tool := &fakeTool{
-		name: "search",
-		desc: "Search",
-		runFn: func(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
+	tool := &bondtest.FakeTool{
+		ToolName: "search",
+		ToolDesc: "Search",
+		RunFn: func(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
 			return []bond.Block{&bond.TextBlock{Text: "result for: " + string(input)}}, nil
 		},
 	}
 
-	fulfiller := newFulfiller(tool)
+	fulfiller := NewFulfiller(tool)
 
 	blocks, err := fulfiller.Execute(context.Background(), "search", json.RawMessage(`{"q":"Go"}`))
 	if err != nil {
@@ -112,7 +113,7 @@ func TestFulfiller_Execute(t *testing.T) {
 }
 
 func TestFulfiller_UnknownTool(t *testing.T) {
-	fulfiller := newFulfiller()
+	fulfiller := NewFulfiller()
 	_, err := fulfiller.Execute(context.Background(), "nonexistent", nil)
 	if err == nil {
 		t.Fatal("expected error for unknown tool")
@@ -171,10 +172,10 @@ func TestIntegration_FullDelegationFlow(t *testing.T) {
 	ctx := context.Background()
 
 	// Caller's tool: a "search" tool that returns static results.
-	searchTool := &fakeTool{
-		name: "search",
-		desc: "Search the web",
-		runFn: func(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
+	searchTool := &bondtest.FakeTool{
+		ToolName: "search",
+		ToolDesc: "Search the web",
+		RunFn: func(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
 			var params struct {
 				Query string `json:"query"`
 			}
@@ -184,8 +185,8 @@ func TestIntegration_FullDelegationFlow(t *testing.T) {
 	}
 
 	// Caller side: build fulfiller and extract skills.
-	fulfiller := newFulfiller(searchTool)
-	skills := skillsFromTools([]bond.Tool{searchTool})
+	fulfiller := NewFulfiller(searchTool)
+	skills := SkillsFromTools([]bond.Tool{searchTool})
 
 	// Simulate: caller attaches skills to a message.
 	msg := a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart("write about Go"))
@@ -233,22 +234,6 @@ func TestIntegration_FullDelegationFlow(t *testing.T) {
 
 // --- Test helpers ---
 
-type fakeTool struct {
-	name  string
-	desc  string
-	runFn func(context.Context, json.RawMessage) ([]bond.Block, error)
-}
-
-func (t *fakeTool) Name() string                { return t.name }
-func (t *fakeTool) Description() string         { return t.desc }
-func (t *fakeTool) InputSchema() json.Marshaler { return json.RawMessage(`{"type":"object"}`) }
-func (t *fakeTool) Run(ctx context.Context, input json.RawMessage) ([]bond.Block, error) {
-	if t.runFn != nil {
-		return t.runFn(ctx, input)
-	}
-	return []bond.Block{&bond.TextBlock{Text: "ok"}}, nil
-}
-
 type mockRequester struct {
 	lastToolName string
 	lastInput    json.RawMessage
@@ -266,7 +251,7 @@ func (r *mockRequester) RequestInput(ctx context.Context, toolName string, input
 // fulfiller directly. This is what the delegation round-trip looks like
 // without network transport.
 type inProcessRequester struct {
-	fulfiller *fulfiller
+	fulfiller *Fulfiller
 }
 
 func (r *inProcessRequester) RequestInput(ctx context.Context, toolName string, input json.RawMessage) ([]bond.Block, error) {

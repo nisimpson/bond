@@ -1,4 +1,4 @@
-package session
+package session_test
 
 import (
 	"context"
@@ -9,18 +9,19 @@ import (
 
 	"github.com/nisimpson/bond"
 	"github.com/nisimpson/bond/agent"
+	"github.com/nisimpson/bond/extra/session"
 )
 
 // ---------------------------------------------------------------------------
 // Test helpers for SummarizationManager property tests
 // ---------------------------------------------------------------------------
 
-// mockSummarizer returns a fixed summary message.
-type mockSummarizer struct {
+// fixedSummarizer returns a fixed summary message.
+type fixedSummarizer struct {
 	summary bond.Message
 }
 
-func (s *mockSummarizer) Summarize(_ context.Context, _ []bond.Message) (bond.Message, error) {
+func (s *fixedSummarizer) Summarize(_ context.Context, _ []bond.Message) (bond.Message, error) {
 	return s.summary, nil
 }
 
@@ -97,8 +98,8 @@ func TestProperty_SummarizationManagerPreservesOrdering(t *testing.T) {
 			Content: []bond.Block{&bond.TextBlock{Text: "Summary of dropped messages"}},
 		}
 
-		mgr, err := NewSummarizationManager(SummarizationManagerOptions{
-			Summarizer: &mockSummarizer{summary: summary},
+		mgr, err := session.NewSummarizationManager(session.SummarizationManagerOptions{
+			Summarizer: &fixedSummarizer{summary: summary},
 			Fallback:   fallback,
 		})
 		if err != nil {
@@ -165,7 +166,7 @@ func TestProperty_SummarizationManagerGracefulDegradation(t *testing.T) {
 		fallback := &tailPolicy{keepLast: keepLast}
 
 		summarizerErr := errors.New("summarizer: service unavailable")
-		mgr, err := NewSummarizationManager(SummarizationManagerOptions{
+		mgr, err := session.NewSummarizationManager(session.SummarizationManagerOptions{
 			Summarizer: &failingSummarizer{err: summarizerErr},
 			Fallback:   fallback,
 		})
@@ -229,8 +230,8 @@ func TestProperty_SummarizationManagerMarksSyntheticMetadata(t *testing.T) {
 			Content: []bond.Block{&bond.TextBlock{Text: randomASCII(rng, 30)}},
 		}
 
-		mgr, err := NewSummarizationManager(SummarizationManagerOptions{
-			Summarizer: &mockSummarizer{summary: summary},
+		mgr, err := session.NewSummarizationManager(session.SummarizationManagerOptions{
+			Summarizer: &fixedSummarizer{summary: summary},
 			Fallback:   fallback,
 		})
 		if err != nil {
@@ -294,7 +295,7 @@ func TestProperty_SummarizationManagerNoOpWhenNothingDropped(t *testing.T) {
 			},
 		}
 
-		mgr, err := NewSummarizationManager(SummarizationManagerOptions{
+		mgr, err := session.NewSummarizationManager(session.SummarizationManagerOptions{
 			Summarizer: summarizer,
 			Fallback:   fallback,
 		})

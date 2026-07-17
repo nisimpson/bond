@@ -244,8 +244,8 @@ func TestProperty_SwarmNilPolicyPassthroughFullHistory(t *testing.T) {
 			return false
 		}
 		for i := range messages {
-			expectedText := textFromBlock(messages[i])
-			receivedText := textFromBlock(capture.received[i])
+			expectedText := bondtest.TextFromBlock(messages[i])
+			receivedText := bondtest.TextFromBlock(capture.received[i])
 			if expectedText != receivedText {
 				t.Logf("message[%d] mismatch: got %q, want %q", i, receivedText, expectedText)
 				return false
@@ -291,8 +291,8 @@ func TestProperty_SwarmFilteredPolicySubsetReceivedByAgent(t *testing.T) {
 		// Property: received messages are a suffix of the original input.
 		expectedStart := len(messages) - len(capture.received)
 		for i, msg := range capture.received {
-			expectedText := textFromBlock(messages[expectedStart+i])
-			receivedText := textFromBlock(msg)
+			expectedText := bondtest.TextFromBlock(messages[expectedStart+i])
+			receivedText := bondtest.TextFromBlock(msg)
 			if expectedText != receivedText {
 				t.Logf("filtered message[%d] mismatch: got %q, want %q", i, receivedText, expectedText)
 				return false
@@ -378,7 +378,7 @@ func TestProperty_SwarmInternalHistoryPreservedAfterTransfer(t *testing.T) {
 		// full internal history, confirming internal history preserved all messages.
 		// The last message in internal history is the dispatch's "done" output.
 		if len(specialistCapture.received) > 0 {
-			lastReceived := textFromBlock(specialistCapture.received[len(specialistCapture.received)-1])
+			lastReceived := bondtest.TextFromBlock(specialistCapture.received[len(specialistCapture.received)-1])
 			if lastReceived != "done" {
 				t.Logf("last message should be dispatch output 'done', got %q", lastReceived)
 				return false
@@ -390,14 +390,4 @@ func TestProperty_SwarmInternalHistoryPreservedAfterTransfer(t *testing.T) {
 	if err := quick.Check(f, &quick.Config{MaxCount: 100}); err != nil {
 		t.Errorf("Property: Swarm internal history preserved after transfer — failed: %v", err)
 	}
-}
-
-// textFromBlock extracts text from the first TextBlock in a message.
-func textFromBlock(msg bond.Message) string {
-	for _, b := range msg.Content {
-		if tb, ok := b.(*bond.TextBlock); ok {
-			return tb.Text
-		}
-	}
-	return ""
 }

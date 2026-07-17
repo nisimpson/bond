@@ -42,7 +42,7 @@ type AgentOptions struct {
 type Agent struct {
 	client    A2AClient
 	tools     []bond.Tool
-	fulfiller *fulfiller
+	fulfiller *Fulfiller
 	skills    []Skill
 }
 
@@ -52,8 +52,8 @@ func NewAgent(opts AgentOptions) *Agent {
 	return &Agent{
 		client:    opts.Client,
 		tools:     opts.Tools,
-		fulfiller: newFulfiller(opts.Tools...),
-		skills:    skillsFromTools(opts.Tools),
+		fulfiller: NewFulfiller(opts.Tools...),
+		skills:    SkillsFromTools(opts.Tools),
 	}
 }
 
