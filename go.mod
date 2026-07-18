@@ -26,7 +26,7 @@ require (
 
 require (
 	github.com/a2aproject/a2a-go/v2 v2.3.1
-	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.60.0
+	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.60.1
 	github.com/google/uuid v1.6.0
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/metric v1.44.0
