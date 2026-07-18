@@ -107,6 +107,9 @@ func Stream(ctx context.Context, agent Agent, messages []Message, opts AgentOpti
 	for _, p := range opts.Plugins {
 		allTools = append(allTools, p.Tools()...)
 		p.Init(registry)
+		if cp, ok := p.(ContextPlugin); ok {
+			ctx = cp.InitContext(ctx)
+		}
 	}
 
 	loop := &streamLoop{
@@ -315,6 +318,7 @@ func (l *streamLoop) executeTools(ctx context.Context, blocks []Block) []Block {
 		for i, tu := range toolCalls {
 			out[i] = &ToolResultBlock{
 				ToolUseID: tu.ID,
+				Name:      tu.Name,
 				Content:   []Block{&TextBlock{Text: errMsg}},
 				IsError:   true,
 			}
@@ -350,6 +354,7 @@ func (l *streamLoop) runTool(ctx context.Context, tu *ToolUseBlock) *ToolResultB
 	if err := l.notify(ctx, &BeforeToolCallHook{ToolUse: tu}); err != nil {
 		return &ToolResultBlock{
 			ToolUseID: tu.ID,
+			Name:      tu.Name,
 			Content:   []Block{&TextBlock{Text: "error: " + err.Error()}},
 			IsError:   true,
 		}
@@ -359,6 +364,7 @@ func (l *streamLoop) runTool(ctx context.Context, tu *ToolUseBlock) *ToolResultB
 	if !exists {
 		result := &ToolResultBlock{
 			ToolUseID: tu.ID,
+			Name:      tu.Name,
 			Content:   []Block{&TextBlock{Text: "error: unknown tool: " + tu.Name}},
 			IsError:   true,
 		}
@@ -370,6 +376,7 @@ func (l *streamLoop) runTool(ctx context.Context, tu *ToolUseBlock) *ToolResultB
 	if err != nil {
 		result := &ToolResultBlock{
 			ToolUseID: tu.ID,
+			Name:      tu.Name,
 			Content:   []Block{&TextBlock{Text: "error: " + err.Error()}},
 			IsError:   true,
 		}
@@ -379,6 +386,7 @@ func (l *streamLoop) runTool(ctx context.Context, tu *ToolUseBlock) *ToolResultB
 
 	result := &ToolResultBlock{
 		ToolUseID: tu.ID,
+		Name:      tu.Name,
 		Content:   output,
 	}
 	_ = l.notify(ctx, &AfterToolCallHook{ToolUse: tu, Result: result})

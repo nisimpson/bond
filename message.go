@@ -62,6 +62,7 @@ type ToolUseBlock struct {
 // ToolResultBlock holds the response from a tool invocation.
 type ToolResultBlock struct {
 	ToolUseID string
+	Name      string  // Name of the tool that produced this result.
 	Content   []Block // typically TextBlock or MediaBlock
 	IsError   bool
 }
