@@ -107,6 +107,9 @@ func Stream(ctx context.Context, agent Agent, messages []Message, opts AgentOpti
 	for _, p := range opts.Plugins {
 		allTools = append(allTools, p.Tools()...)
 		p.Init(registry)
+		if cp, ok := p.(ContextPlugin); ok {
+			ctx = cp.InitContext(ctx)
+		}
 	}
 
 	loop := &streamLoop{

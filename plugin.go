@@ -1,6 +1,6 @@
 package bond
 
-import "log/slog"
+import "context"
 
 // Plugin bundles tools and hook registrations into a reusable unit.
 type Plugin interface {
@@ -11,6 +11,17 @@ type Plugin interface {
 	// Init registers hooks on the provided registry. Called once during
 	// stream setup before the loop begins.
 	Init(registry *HookRegistry)
+}
+
+// ContextPlugin is optionally implemented by plugins that need to inject
+// values into the stream context. This is useful for request-scoped state
+// like loggers, trace IDs, or session identifiers that should flow through
+// the entire agent loop and be accessible from hooks and tools.
+//
+// InitContext is called after [Plugin.Init], so the plugin is fully set up
+// (hooks registered) before it enriches the context.
+type ContextPlugin interface {
+	InitContext(ctx context.Context) context.Context
 }
 
 // simplePlugin is a convenience implementation of Plugin that delegates to
@@ -47,16 +58,3 @@ func NewHooksPlugin(name string, onInit func(*HookRegistry)) Plugin {
 		initFunc: onInit,
 	}
 }
-
-type LoggingPlugin struct {
-	Logger *slog.Logger
-	Level  slog.Level
-}
-
-func (p *LoggingPlugin) Name() string  { return "logging" }
-func (p *LoggingPlugin) Tools() []Tool { return nil }
-func (p *LoggingPlugin) Init(registry *HookRegistry) {
-	// TODO: register logging hooks
-}
-
-var _ Plugin = (*LoggingPlugin)(nil)
