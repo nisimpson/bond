@@ -3,7 +3,7 @@ module github.com/nisimpson/bond
 go 1.26.5
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.42.1
+	github.com/aws/aws-sdk-go-v2 v1.43.0
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.55.0
 	github.com/google/jsonschema-go v0.4.3
 	github.com/modelcontextprotocol/go-sdk v1.6.1
@@ -11,10 +11,10 @@ require (
 
 require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.14 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.30 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.30 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.31 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.31 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.13 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.12.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.12.8 // indirect
 	github.com/aws/smithy-go v1.27.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
@@ -26,7 +26,7 @@ require (
 
 require (
 	github.com/a2aproject/a2a-go/v2 v2.3.1
-	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.60.0
+	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.61.0
 	github.com/google/uuid v1.6.0
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/metric v1.44.0
